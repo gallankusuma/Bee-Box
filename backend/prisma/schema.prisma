@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enum support in Prisma, so Role is validated in
+// application code (see src/utils/roles.js) against: STUDENT | PARENT | TEACHER
+model User {
+  id           String   @id @default(cuid())
+  email        String?  @unique
+  username     String?  @unique
+  passwordHash String
+  role         String
+  name         String
+  avatar       String   @default("🧒")
+  createdAt    DateTime @default(now())
+
+  studentProfile StudentProfile?
+  teacherClasses Class[]      @relation("TeacherClasses")
+  parentLinks    ParentLink[] @relation("ParentSide")
+}
+
+// One row per student. Mirrors the old localStorage `S` shape so nothing
+// meaningful from the client app is lost when it starts talking to the API.
+model StudentProfile {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  user           User    @relation(fields: [userId], references: [id])
+  birthdate      String?
+  grade          Int     @default(1)
+  xp             Int     @default(0)
+  level          Int     @default(1)
+  streak         Int     @default(0) // consecutive days played
+  lastPlayedDate String?
+  maxStreak      Int     @default(0) // best in-game combo ever
+  totalGames     Int     @default(0)
+  correctAnswers Int     @default(0)
+  totalQuestions Int     @default(0)
+  fastestTime    Int     @default(999)
+  unlockedGrades String  @default("[1]") // JSON-encoded array of grade numbers
+  sound          Boolean @default(true)
+  vibrate        Boolean @default(true)
+
+  gradeProgress    GradeProgress[]
+  sessions         GameSession[]
+  exams            ExamAttempt[]
+  achievements     StudentAchievement[]
+  classEnrollments ClassEnrollment[]
+  parentLinks      ParentLink[]         @relation("StudentSide")
+}
+
+// Per grade + sub-level completion/star rating (replaces S.gp[grade].subs[sub]).
+model GradeProgress {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  grade     Int
+  subLevel  Int
+  done      Boolean        @default(false)
+  stars     Int            @default(0)
+
+  @@unique([studentId, grade, subLevel])
+}
+
+// A finished GameSession IS a history record - no separate History table needed.
+model GameSession {
+  id         String    @id @default(cuid())
+  studentId  String
+  student    StudentProfile @relation(fields: [studentId], references: [id])
+  grade      Int
+  subLevel   Int
+  isExam     Boolean   @default(false)
+  status     String    @default("active") // active | finished
+  score      Int       @default(0)
+  correct    Int       @default(0)
+  wrong      Int       @default(0)
+  maxStreak  Int       @default(0)
+  duration   Int?
+  accuracy   Int?
+  xpEarned   Int?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  questions SessionQuestion[]
+}
+
+// Server holds the answer key; the client is only ever sent question/options/id.
+model SessionQuestion {
+  id           String    @id @default(cuid())
+  sessionId    String
+  session      GameSession @relation(fields: [sessionId], references: [id])
+  index        Int
+  questionText String
+  category     String
+  answerKey    String // never sent to the client
+  options      String? // JSON-encoded array, null when useInput
+  useInput     Boolean   @default(false)
+  answeredAt   DateTime?
+  submitted    String?
+  isCorrect    Boolean?
+  answerMs     Int?
+  scoreEarned  Int?
+
+  @@unique([sessionId, index])
+}
+
+model ExamAttempt {
+  id          String    @id @default(cuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id])
+  grade       Int
+  score       Int       @default(0)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+}
+
+model StudentAchievement {
+  id            String   @id @default(cuid())
+  studentId     String
+  student       StudentProfile @relation(fields: [studentId], references: [id])
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  @@unique([studentId, achievementId])
+}
+
+// Teacher-owned roster. Students self-enroll with the joinCode.
+model Class {
+  id        String   @id @default(cuid())
+  teacherId String
+  teacher   User     @relation("TeacherClasses", fields: [teacherId], references: [id])
+  name      String
+  grade     Int
+  joinCode  String   @unique
+  createdAt DateTime @default(now())
+
+  enrollments ClassEnrollment[]
+}
+
+model ClassEnrollment {
+  id        String         @id @default(cuid())
+  classId   String
+  class     Class          @relation(fields: [classId], references: [id])
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+  joinedAt  DateTime       @default(now())
+
+  @@unique([classId, studentId])
+}
+
+// Parent gets read-only visibility into a student's progress via a link code.
+model ParentLink {
+  id        String         @id @default(cuid())
+  parentId  String
+  parent    User           @relation("ParentSide", fields: [parentId], references: [id])
+  studentId String
+  student   StudentProfile @relation("StudentSide", fields: [studentId], references: [id])
+  linkedAt  DateTime       @default(now())
+
+  @@unique([parentId, studentId])
+}
