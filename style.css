@@ -898,6 +898,11 @@ body {
 
 .ob-hint { font-size: 0.75rem; color: var(--text2); margin-bottom: 14px; }
 
+.ob-error { font-size: 0.8rem; color: var(--neonPk); background: rgba(255,45,120,0.1); border: 1px solid rgba(255,45,120,0.3); border-radius: var(--rs); padding: 10px 12px; margin-bottom: 14px; }
+.ob-switch-link { text-align: center; font-size: 0.8rem; color: var(--text2); margin-top: 16px; }
+.ob-switch-link a { color: var(--neonB); font-weight: 600; text-decoration: none; }
+.ob-switch-link a:hover { text-decoration: underline; }
+
 .ob-btn-group { display: flex; gap: 8px; margin-top: 20px; }
 
 .ob-btn {

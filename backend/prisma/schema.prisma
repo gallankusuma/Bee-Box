@@ -83,6 +83,7 @@ model GameSession {
   accuracy   Int?
   xpEarned   Int?
   createdAt  DateTime  @default(now())
+  lastActivityAt DateTime @default(now()) // bumped on each answer; used to time the NEXT answer server-side
   finishedAt DateTime?
 
   questions SessionQuestion[]

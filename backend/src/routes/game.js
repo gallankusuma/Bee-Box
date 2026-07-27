@@ -82,7 +82,7 @@ router.post('/:sessionId/answer', requireAuth, requireRole('STUDENT'), async (re
   if(!profile) return;
 
   const { sessionId } = req.params;
-  const { questionId, answer, answerMs } = req.body || {};
+  const { questionId, answer } = req.body || {};
 
   const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
   if(!session || session.studentId !== profile.id) return res.status(404).json({ error: 'Session not found' });
@@ -93,7 +93,11 @@ router.post('/:sessionId/answer', requireAuth, requireRole('STUDENT'), async (re
   if(question.answeredAt) return res.status(409).json({ error: 'Question already answered' });
 
   const isCorrect = String(answer ?? '').trim() === String(question.answerKey).trim();
-  const ms = Math.max(0, parseInt(answerMs, 10) || 0);
+
+  // Elapsed time is measured server-side from the session's own clock (bumped
+  // after every answer) - never trust a client-reported duration for scoring.
+  const now = new Date();
+  const ms = Math.max(0, now.getTime() - session.lastActivityAt.getTime());
 
   let scoreEarned = 0;
   if(isCorrect) {
@@ -104,8 +108,9 @@ router.post('/:sessionId/answer', requireAuth, requireRole('STUDENT'), async (re
 
   await prisma.sessionQuestion.update({
     where: { id: question.id },
-    data: { submitted: String(answer ?? ''), isCorrect, answerMs: ms, scoreEarned, answeredAt: new Date() }
+    data: { submitted: String(answer ?? ''), isCorrect, answerMs: ms, scoreEarned, answeredAt: now }
   });
+  await prisma.gameSession.update({ where: { id: session.id }, data: { lastActivityAt: now } });
 
   res.json({ isCorrect, scoreEarned, correctAnswer: isCorrect ? null : question.answerKey });
 });
@@ -168,6 +173,7 @@ router.post('/:sessionId/finish', requireAuth, requireRole('STUDENT'), async (re
   });
 
   // --- Non-exam: grade progress stars + next-grade unlock ---
+  let gradeUnlocked = null;
   if(!session.isExam) {
     const stars = accuracy === 100 ? 3 : accuracy >= 80 ? 2 : 1;
     const existing = await prisma.gradeProgress.findUnique({
@@ -185,6 +191,7 @@ router.post('/:sessionId/finish', requireAuth, requireRole('STUDENT'), async (re
       if(!unlockedGrades.includes(session.grade + 1)) {
         unlockedGrades.push(session.grade + 1);
         await prisma.studentProfile.update({ where: { id: profile.id }, data: { unlockedGrades: JSON.stringify(unlockedGrades) } });
+        gradeUnlocked = session.grade + 1;
       }
     }
   } else {
@@ -217,7 +224,7 @@ router.post('/:sessionId/finish', requireAuth, requireRole('STUDENT'), async (re
     score, correct, wrong, total, accuracy, duration, maxStreak, xpEarned,
     xp: updatedProfile.xp, level: updatedProfile.level, leveledUp: updatedProfile.level > profile.level,
     streak: updatedProfile.streak,
-    newAchievements
+    newAchievements, gradeUnlocked
   });
 });
 

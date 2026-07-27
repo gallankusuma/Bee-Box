@@ -54,6 +54,14 @@
                     <input type="text" id="obName" class="ob-input" placeholder="Contoh: Budi Santoso" maxlength="30" autocomplete="off">
                 </div>
                 <div class="ob-field">
+                    <label for="obUsername">Username</label>
+                    <input type="text" id="obUsername" class="ob-input" placeholder="Buat username unik" maxlength="20" autocomplete="username">
+                </div>
+                <div class="ob-field">
+                    <label for="obPassword">Password</label>
+                    <input type="password" id="obPassword" class="ob-input" placeholder="Minimal 6 karakter" maxlength="50" autocomplete="new-password">
+                </div>
+                <div class="ob-field">
                     <label>Pilih Avatar</label>
                     <div class="ob-avatar-grid">
                         <div class="ob-avatar selected" data-avatar="🧒">🧒</div>
@@ -66,7 +74,9 @@
                         <div class="ob-avatar" data-avatar="🧑‍💻">🧑‍💻</div>
                     </div>
                 </div>
+                <div class="ob-error" id="obError1" style="display:none"></div>
                 <button class="ob-btn ob-next" id="obNext1">Lanjut <i class="fas fa-arrow-right"></i></button>
+                <p class="ob-switch-link">Sudah punya akun? <a href="#" id="obGotoLogin">Masuk di sini</a></p>
             </div>
 
             <!-- Step 2: Birthdate & Age -->
@@ -125,6 +135,30 @@
                 <div class="ob-dot active" data-dot="1"></div>
                 <div class="ob-dot" data-dot="2"></div>
                 <div class="ob-dot" data-dot="3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ LOGIN ============ -->
+    <div id="loginScreen" class="screen">
+        <div class="ob-container">
+            <div class="ob-header">
+                <div class="ob-logo">🧠</div>
+                <h1>Masuk ke <span class="neon-text">MathQuest</span></h1>
+                <p class="ob-desc">Lanjutin petualangan matematika kamu!</p>
+            </div>
+            <div class="ob-step active" data-step="1">
+                <div class="ob-field">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" class="ob-input" placeholder="Username kamu" autocomplete="username">
+                </div>
+                <div class="ob-field">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" class="ob-input" placeholder="Password kamu" autocomplete="current-password">
+                </div>
+                <div class="ob-error" id="loginError" style="display:none"></div>
+                <button class="ob-btn ob-next" id="loginSubmit">Masuk <i class="fas fa-arrow-right"></i></button>
+                <p class="ob-switch-link">Belum punya akun? <a href="#" id="loginGotoRegister">Daftar di sini</a></p>
             </div>
         </div>
     </div>
