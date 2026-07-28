@@ -998,6 +998,9 @@ async function renderProfile() {
   const sVib = $('settingVibrate');
   if(sVib) sVib.checked = S.vibrate;
 
+  const linkCodeEl = $('studentLinkCode');
+  if(linkCodeEl) linkCodeEl.textContent = S.linkCode || '-';
+
   // Achievements grid
   const grid = $('achGrid');
   if(grid) {
@@ -1452,6 +1455,33 @@ document.addEventListener('DOMContentLoaded', () => {
   if(sBirth) {
     sBirth.addEventListener('change', async e => {
       try { await Api.patch('/profile/me', { birthdate: e.target.value }); } catch(err) { alert(err.message); }
+    });
+  }
+
+  // Join a teacher's class with a code
+  const joinClassBtn = safeEl('joinClassBtn');
+  if(joinClassBtn) {
+    joinClassBtn.addEventListener('click', async () => {
+      const code = safeEl('joinClassCode')?.value.trim();
+      const msgEl = safeEl('joinClassMsg');
+      msgEl.style.display = 'none';
+      msgEl.classList.remove('error');
+      if(!code) return;
+
+      joinClassBtn.disabled = true;
+      try {
+        const res = await Api.post('/classes/join', { joinCode: code });
+        msgEl.textContent = `Berhasil gabung ke ${res.className}!`;
+        msgEl.style.display = 'block';
+        safeEl('joinClassCode').value = '';
+        showToast('🎉', 'GABUNG KELAS', `Kamu sekarang di ${res.className}`);
+      } catch(err) {
+        msgEl.textContent = err.message;
+        msgEl.classList.add('error');
+        msgEl.style.display = 'block';
+      } finally {
+        joinClassBtn.disabled = false;
+      }
     });
   }
 

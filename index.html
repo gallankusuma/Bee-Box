@@ -419,6 +419,28 @@
                     <label class="toggle"><input type="checkbox" id="settingVibrate" checked><span class="toggle-slider"></span></label>
                 </div>
             </div>
+            <!-- Class + Parent linking -->
+            <div class="section-header" style="margin-top:20px">
+                <h3><i class="fas fa-chalkboard-teacher"></i> Kelas &amp; Orang Tua</h3>
+            </div>
+            <div class="settings-group glass">
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-door-open"></i><span>Gabung Kelas</span></div>
+                </div>
+                <div class="join-class-row">
+                    <input type="text" id="joinClassCode" class="setting-input" placeholder="Kode dari guru" maxlength="6">
+                    <button class="join-class-btn" id="joinClassBtn">Gabung</button>
+                </div>
+                <div id="joinClassMsg" class="join-class-msg" style="display:none"></div>
+            </div>
+            <div class="settings-group glass">
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-user-friends"></i><span>Kode buat Orang Tua</span></div>
+                    <span class="link-code-pill" id="studentLinkCode">-</span>
+                </div>
+                <p class="join-class-hint">Kasih kode ini ke orang tua kamu biar mereka bisa lihat progres kamu.</p>
+            </div>
+
             <div class="settings-group glass">
                 <div class="setting-item danger" id="resetDataBtn">
                     <div class="setting-info"><i class="fas fa-trash-alt"></i><span>Reset Semua Data</span></div>
