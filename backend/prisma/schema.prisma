@@ -44,6 +44,7 @@ model StudentProfile {
   unlockedGrades String  @default("[1]") // JSON-encoded array of grade numbers
   sound          Boolean @default(true)
   vibrate        Boolean @default(true)
+  linkCode       String  @unique // shown to the student, used by a parent to link their account
 
   gradeProgress    GradeProgress[]
   sessions         GameSession[]

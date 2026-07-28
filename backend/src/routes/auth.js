@@ -4,6 +4,16 @@ const prisma = require('../db');
 const { isValidRole } = require('../utils/roles');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { requireAuth } = require('../middleware/auth');
+const { generateCode } = require('../utils/codes');
+
+async function uniqueLinkCode() {
+  for(let i = 0; i < 5; i++) {
+    const code = generateCode();
+    const clash = await prisma.studentProfile.findUnique({ where: { linkCode: code } });
+    if(!clash) return code;
+  }
+  throw new Error('Could not generate a unique link code, please retry');
+}
 
 const router = express.Router();
 
@@ -35,6 +45,7 @@ router.post('/register', async (req, res) => {
   if(existing) return res.status(409).json({ error: 'username or email already taken' });
 
   const passwordHash = await bcrypt.hash(password, 10);
+  const linkCode = role === 'STUDENT' ? await uniqueLinkCode() : null;
 
   const user = await prisma.user.create({
     data: {
@@ -49,7 +60,8 @@ router.post('/register', async (req, res) => {
           create: {
             birthdate: birthdate || null,
             grade: parseInt(grade, 10),
-            unlockedGrades: JSON.stringify(Array.from({ length: parseInt(grade, 10) }, (_, i) => i + 1))
+            unlockedGrades: JSON.stringify(Array.from({ length: parseInt(grade, 10) }, (_, i) => i + 1)),
+            linkCode
           }
         }
       } : {})

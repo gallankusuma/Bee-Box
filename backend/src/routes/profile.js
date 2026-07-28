@@ -43,6 +43,7 @@ router.get('/me', requireAuth, requireRole('STUDENT'), async (req, res) => {
     totalQuestions: profile.totalQuestions,
     unlocked: JSON.parse(profile.unlockedGrades || '[1]'),
     fastestTime: profile.fastestTime,
+    linkCode: profile.linkCode,
     sound: profile.sound,
     vibrate: profile.vibrate,
     gp,

@@ -5,6 +5,8 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const gameRoutes = require('./routes/game');
+const classesRoutes = require('./routes/classes');
+const parentLinksRoutes = require('./routes/parentLinks');
 
 const app = express();
 app.use(cors());
@@ -15,6 +17,8 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/classes', classesRoutes);
+app.use('/api/parent-links', parentLinksRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
