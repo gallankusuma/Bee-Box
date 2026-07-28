@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MathQuest Guru — Back Office</title>
+    <meta name="description" content="Dashboard guru untuk memantau progres siswa MathQuest per kelas.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ============ AUTH (login / register) ============ -->
+    <div id="authScreen" class="screen active">
+        <div class="auth-card">
+            <div class="auth-logo">🧠 Math<span>Quest</span> <span class="auth-badge">GURU</span></div>
+
+            <div id="authLoginPanel" class="auth-panel active">
+                <h1>Masuk ke Dashboard</h1>
+                <p class="auth-desc">Pantau progres belajar semua siswa kamu di sini.</p>
+                <div class="field">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" autocomplete="username">
+                </div>
+                <div class="field">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" autocomplete="current-password">
+                </div>
+                <div class="error-box" id="loginError" style="display:none"></div>
+                <button class="btn btn-primary btn-block" id="loginBtn">Masuk</button>
+                <p class="switch-link">Belum punya akun? <a href="#" id="gotoRegister">Daftar sebagai guru</a></p>
+            </div>
+
+            <div id="authRegisterPanel" class="auth-panel">
+                <h1>Daftar Akun Guru</h1>
+                <p class="auth-desc">Buat akun untuk mulai membuat kelas.</p>
+                <div class="field">
+                    <label for="regName">Nama Lengkap</label>
+                    <input type="text" id="regName" autocomplete="name">
+                </div>
+                <div class="field">
+                    <label for="regUsername">Username</label>
+                    <input type="text" id="regUsername" autocomplete="username">
+                </div>
+                <div class="field">
+                    <label for="regPassword">Password</label>
+                    <input type="password" id="regPassword" autocomplete="new-password">
+                </div>
+                <div class="error-box" id="registerError" style="display:none"></div>
+                <button class="btn btn-primary btn-block" id="registerBtn">Daftar</button>
+                <p class="switch-link">Sudah punya akun? <a href="#" id="gotoLogin">Masuk di sini</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ APP SHELL ============ -->
+    <div id="appShell" style="display:none">
+        <header class="topbar">
+            <div class="topbar-logo">🧠 Math<span>Quest</span> <span class="auth-badge">GURU</span></div>
+            <div class="topbar-right">
+                <span id="teacherName" class="teacher-name"></span>
+                <button class="btn btn-ghost" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Keluar</button>
+            </div>
+        </header>
+
+        <main class="main-wrap">
+            <!-- ============ DASHBOARD (class list) ============ -->
+            <section id="dashboardView" class="view active">
+                <div class="view-header">
+                    <h2>Kelas Saya</h2>
+                    <button class="btn btn-primary" id="newClassBtn"><i class="fas fa-plus"></i> Buat Kelas</button>
+                </div>
+                <div id="classGrid" class="class-grid"></div>
+                <div id="classEmpty" class="empty-state" style="display:none">
+                    <i class="fas fa-chalkboard"></i>
+                    <p>Belum ada kelas. Buat kelas pertamamu untuk mulai memantau siswa.</p>
+                </div>
+            </section>
+
+            <!-- ============ CLASS DETAIL (roster) ============ -->
+            <section id="classDetailView" class="view">
+                <div class="view-header">
+                    <button class="btn btn-ghost btn-back" id="backToDashboard"><i class="fas fa-arrow-left"></i> Kembali</button>
+                    <div>
+                        <h2 id="classDetailName">-</h2>
+                        <p class="join-code-line">Kode Gabung: <span id="classDetailCode" class="join-code"></span></p>
+                    </div>
+                </div>
+                <table class="roster-table">
+                    <thead>
+                        <tr>
+                            <th>Siswa</th><th>Kelas</th><th>Level</th><th>XP</th>
+                            <th>Akurasi</th><th>Games</th><th>Max Combo</th><th>Terakhir Main</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rosterBody"></tbody>
+                </table>
+                <div id="rosterEmpty" class="empty-state" style="display:none">
+                    <i class="fas fa-user-graduate"></i>
+                    <p>Belum ada siswa yang gabung. Bagikan kode gabung ke siswa kamu.</p>
+                </div>
+            </section>
+
+            <!-- ============ STUDENT DETAIL ============ -->
+            <section id="studentDetailView" class="view">
+                <div class="view-header">
+                    <button class="btn btn-ghost btn-back" id="backToClass"><i class="fas fa-arrow-left"></i> Kembali</button>
+                    <div class="student-detail-head">
+                        <span id="studentDetailAvatar" class="student-avatar-lg"></span>
+                        <div>
+                            <h2 id="studentDetailName">-</h2>
+                            <p id="studentDetailMeta" class="student-meta"></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="stat-row" id="studentStatRow"></div>
+                <h3 class="section-title">Riwayat Terakhir</h3>
+                <table class="roster-table">
+                    <thead>
+                        <tr><th>Tanggal</th><th>Kelas</th><th>Skor</th><th>Benar</th><th>Akurasi</th><th>Durasi</th><th>Tipe</th></tr>
+                    </thead>
+                    <tbody id="studentHistoryBody"></tbody>
+                </table>
+                <div id="studentHistoryEmpty" class="empty-state" style="display:none">
+                    <i class="fas fa-history"></i>
+                    <p>Belum ada riwayat permainan.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ============ NEW CLASS MODAL ============ -->
+    <div class="modal-overlay" id="newClassModal">
+        <div class="modal-card">
+            <h3>Buat Kelas Baru</h3>
+            <div class="field">
+                <label for="newClassName">Nama Kelas</label>
+                <input type="text" id="newClassName" placeholder="Contoh: Kelas 4B">
+            </div>
+            <div class="field">
+                <label for="newClassGrade">Tingkat Kelas</label>
+                <select id="newClassGrade">
+                    <option value="1">Kelas 1 SD</option>
+                    <option value="2">Kelas 2 SD</option>
+                    <option value="3">Kelas 3 SD</option>
+                    <option value="4">Kelas 4 SD</option>
+                    <option value="5">Kelas 5 SD</option>
+                    <option value="6">Kelas 6 SD</option>
+                    <option value="7">Kelas 7 SMP</option>
+                    <option value="8">Kelas 8 SMP</option>
+                    <option value="9">Kelas 9 SMP</option>
+                </select>
+            </div>
+            <div class="error-box" id="newClassError" style="display:none"></div>
+            <div class="modal-btns">
+                <button class="btn btn-ghost" id="newClassCancel">Batal</button>
+                <button class="btn btn-primary" id="newClassSubmit">Buat Kelas</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
