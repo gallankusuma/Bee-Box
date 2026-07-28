@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MathQuest — Platform Edukasi Matematika Interaktif</title>
+    <meta name="description" content="Platform edukasi matematika interaktif bertingkat dari SD kelas 1 sampai SMP kelas 3 dengan monitoring & analytics.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+    <!-- Animated BG -->
+    <div class="bg-animation">
+        <div class="bg-orb orb-1"></div>
+        <div class="bg-orb orb-2"></div>
+        <div class="bg-orb orb-3"></div>
+        <canvas id="particleCanvas"></canvas>
+    </div>
+
+    <!-- ============ SPLASH ============ -->
+    <div id="splashScreen" class="screen active">
+        <div class="splash-content">
+            <div class="splash-icon-wrap">
+                <div class="splash-icon">🧠</div>
+                <div class="splash-ring"></div>
+            </div>
+            <h1>Math<span>Quest</span></h1>
+            <p class="splash-tagline">Level Up Your Math Skills!</p>
+            <div class="splash-loader">
+                <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ ONBOARDING / REGISTRATION ============ -->
+    <div id="onboardingScreen" class="screen">
+        <div class="ob-container">
+            <div class="ob-header">
+                <div class="ob-logo">🧠</div>
+                <h1>Selamat Datang di <span class="neon-text">MathQuest</span></h1>
+                <p class="ob-desc">Isi data diri kamu biar soalnya pas sama kelasmu!</p>
+            </div>
+
+            <!-- Step 1: Name & Avatar -->
+            <div class="ob-step active" data-step="1">
+                <div class="ob-step-badge">1/3</div>
+                <h3>Siapa Nama Kamu? 👋</h3>
+                <div class="ob-field">
+                    <label for="obName">Nama Lengkap</label>
+                    <input type="text" id="obName" class="ob-input" placeholder="Contoh: Budi Santoso" maxlength="30" autocomplete="off">
+                </div>
+                <div class="ob-field">
+                    <label for="obUsername">Username</label>
+                    <input type="text" id="obUsername" class="ob-input" placeholder="Buat username unik" maxlength="20" autocomplete="username">
+                </div>
+                <div class="ob-field">
+                    <label for="obPassword">Password</label>
+                    <input type="password" id="obPassword" class="ob-input" placeholder="Minimal 6 karakter" maxlength="50" autocomplete="new-password">
+                </div>
+                <div class="ob-field">
+                    <label>Pilih Avatar</label>
+                    <div class="ob-avatar-grid">
+                        <div class="ob-avatar selected" data-avatar="🧒">🧒</div>
+                        <div class="ob-avatar" data-avatar="👧">👧</div>
+                        <div class="ob-avatar" data-avatar="🦸">🦸</div>
+                        <div class="ob-avatar" data-avatar="🧑‍🚀">🧑‍🚀</div>
+                        <div class="ob-avatar" data-avatar="🧙">🧙</div>
+                        <div class="ob-avatar" data-avatar="🥷">🥷</div>
+                        <div class="ob-avatar" data-avatar="👩‍🎓">👩‍🎓</div>
+                        <div class="ob-avatar" data-avatar="🧑‍💻">🧑‍💻</div>
+                    </div>
+                </div>
+                <div class="ob-error" id="obError1" style="display:none"></div>
+                <button class="ob-btn ob-next" id="obNext1">Lanjut <i class="fas fa-arrow-right"></i></button>
+                <p class="ob-switch-link">Sudah punya akun? <a href="#" id="obGotoLogin">Masuk di sini</a></p>
+            </div>
+
+            <!-- Step 2: Birthdate & Age -->
+            <div class="ob-step" data-step="2">
+                <div class="ob-step-badge">2/3</div>
+                <h3>Tanggal Lahir Kamu 🎂</h3>
+                <div class="ob-field">
+                    <label for="obBirthdate">Tanggal Lahir</label>
+                    <input type="date" id="obBirthdate" class="ob-input">
+                </div>
+                <div class="ob-age-display" id="obAgeDisplay" style="display:none">
+                    <div class="ob-age-circle" id="obAgeCircle">0</div>
+                    <div class="ob-age-text">
+                        <span id="obAgeLabel">Umur kamu</span>
+                        <span class="ob-age-suggest" id="obAgeSuggest"></span>
+                    </div>
+                </div>
+                <div class="ob-btn-group">
+                    <button class="ob-btn ob-back" id="obBack2"><i class="fas fa-arrow-left"></i> Kembali</button>
+                    <button class="ob-btn ob-next" id="obNext2">Lanjut <i class="fas fa-arrow-right"></i></button>
+                </div>
+            </div>
+
+            <!-- Step 3: Grade Selection -->
+            <div class="ob-step" data-step="3">
+                <div class="ob-step-badge">3/3</div>
+                <h3>Kamu Kelas Berapa? 🎓</h3>
+                <p class="ob-hint" id="obGradeHint">Pilih kelas kamu sekarang</p>
+                <div class="ob-grade-section">
+                    <div class="ob-grade-label">SD (Sekolah Dasar)</div>
+                    <div class="ob-grade-grid">
+                        <button class="ob-grade-btn" data-grade="1">Kelas 1</button>
+                        <button class="ob-grade-btn" data-grade="2">Kelas 2</button>
+                        <button class="ob-grade-btn" data-grade="3">Kelas 3</button>
+                        <button class="ob-grade-btn" data-grade="4">Kelas 4</button>
+                        <button class="ob-grade-btn" data-grade="5">Kelas 5</button>
+                        <button class="ob-grade-btn" data-grade="6">Kelas 6</button>
+                    </div>
+                </div>
+                <div class="ob-grade-section">
+                    <div class="ob-grade-label">SMP (Sekolah Menengah Pertama)</div>
+                    <div class="ob-grade-grid">
+                        <button class="ob-grade-btn" data-grade="7">Kelas 7</button>
+                        <button class="ob-grade-btn" data-grade="8">Kelas 8</button>
+                        <button class="ob-grade-btn" data-grade="9">Kelas 9</button>
+                    </div>
+                </div>
+                <div class="ob-btn-group">
+                    <button class="ob-btn ob-back" id="obBack3"><i class="fas fa-arrow-left"></i> Kembali</button>
+                    <button class="ob-btn ob-start" id="obStart" disabled>Mulai Petualangan! 🚀</button>
+                </div>
+            </div>
+
+            <!-- Progress dots -->
+            <div class="ob-dots">
+                <div class="ob-dot active" data-dot="1"></div>
+                <div class="ob-dot" data-dot="2"></div>
+                <div class="ob-dot" data-dot="3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ LOGIN ============ -->
+    <div id="loginScreen" class="screen">
+        <div class="ob-container">
+            <div class="ob-header">
+                <div class="ob-logo">🧠</div>
+                <h1>Masuk ke <span class="neon-text">MathQuest</span></h1>
+                <p class="ob-desc">Lanjutin petualangan matematika kamu!</p>
+            </div>
+            <div class="ob-step active" data-step="1">
+                <div class="ob-field">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" class="ob-input" placeholder="Username kamu" autocomplete="username">
+                </div>
+                <div class="ob-field">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" class="ob-input" placeholder="Password kamu" autocomplete="current-password">
+                </div>
+                <div class="ob-error" id="loginError" style="display:none"></div>
+                <button class="ob-btn ob-next" id="loginSubmit">Masuk <i class="fas fa-arrow-right"></i></button>
+                <p class="ob-switch-link">Belum punya akun? <a href="#" id="loginGotoRegister">Daftar di sini</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ TAB 1: HOME ============ -->
+    <div id="homeScreen" class="screen">
+        <div class="app-container">
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <div class="mini-logo">🧠</div>
+                    <span class="mini-logo-text">Math<span>Quest</span></span>
+                </div>
+                <div class="top-bar-right">
+                    <div class="xp-pill"><i class="fas fa-bolt"></i> <span id="headerXP">0</span> XP</div>
+                </div>
+            </div>
+
+            <!-- Hero Card -->
+            <div class="hero-card">
+                <div class="hero-bg-pattern"></div>
+                <div class="hero-content">
+                    <div class="hero-greeting">
+                        <span class="hero-wave">👋</span>
+                        <div>
+                            <p class="hero-hello" id="heroHello">Halo!</p>
+                            <h2 class="hero-name" id="heroName">Petualang</h2>
+                        </div>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat">
+                            <div class="hero-stat-val" id="heroLevel">1</div>
+                            <div class="hero-stat-lbl">Level</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-stat">
+                            <div class="hero-stat-val" id="heroStreak">0</div>
+                            <div class="hero-stat-lbl">🔥 Streak</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-stat">
+                            <div class="hero-stat-val" id="heroAccuracy">0%</div>
+                            <div class="hero-stat-lbl">Akurasi</div>
+                        </div>
+                    </div>
+                </div>
+                <button class="hero-edit-btn" id="editProfileBtn" title="Edit Profil"><i class="fas fa-pen"></i></button>
+                <div class="hero-grade-badge" id="heroGradeBadge">Kelas 1 SD</div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <button class="quick-action-btn qa-play" id="quickPlayBtn">
+                    <div class="qa-icon"><i class="fas fa-play"></i></div>
+                    <span>Main Cepat</span>
+                </button>
+                <button class="quick-action-btn qa-daily" id="dailyChallengeBtn">
+                    <div class="qa-icon"><i class="fas fa-calendar-star"></i></div>
+                    <span>Tantangan Harian</span>
+                </button>
+            </div>
+
+            <!-- Level Map -->
+            <div class="section-header">
+                <h3><i class="fas fa-map"></i> Peta Petualangan</h3>
+                <div class="section-tabs">
+                    <button class="tab-btn active" data-filter="all">Semua</button>
+                    <button class="tab-btn" data-filter="sd">SD</button>
+                    <button class="tab-btn" data-filter="smp">SMP</button>
+                </div>
+            </div>
+            <div class="level-map" id="levelMap"></div>
+        </div>
+    </div>
+
+    <!-- ============ TAB 2: ANALYTICS (Stockbit-Style) ============ -->
+    <div id="analyticsScreen" class="screen">
+        <div class="app-container analytics-container">
+            <div class="top-bar">
+                <h2 class="page-title"><i class="fas fa-chart-line"></i> Analytics</h2>
+            </div>
+
+            <!-- Big Chart Area (Stockbit-style) -->
+            <div class="big-chart-wrap">
+                <div class="big-chart-header">
+                    <div>
+                        <div class="big-chart-val" id="bigChartVal">0</div>
+                        <div class="big-chart-label">Total Skor</div>
+                    </div>
+                    <div class="big-chart-change" id="bigChartChange">
+                        <i class="fas fa-arrow-up"></i> <span>0%</span>
+                    </div>
+                </div>
+                <div class="big-chart-canvas-wrap">
+                    <canvas id="bigChart"></canvas>
+                </div>
+                <div class="timeframe-selector">
+                    <button class="tf-btn active" data-tf="1w">1W</button>
+                    <button class="tf-btn" data-tf="1m">1M</button>
+                    <button class="tf-btn" data-tf="3m">3M</button>
+                    <button class="tf-btn" data-tf="all">ALL</button>
+                </div>
+            </div>
+
+            <!-- Key Metrics Row -->
+            <div class="metric-pills">
+                <div class="metric-pill">
+                    <div class="mp-icon green"><i class="fas fa-bullseye"></i></div>
+                    <div class="mp-info"><div class="mp-val" id="mpAccuracy">0%</div><div class="mp-lbl">Akurasi</div></div>
+                </div>
+                <div class="metric-pill">
+                    <div class="mp-icon blue"><i class="fas fa-bolt"></i></div>
+                    <div class="mp-info"><div class="mp-val" id="mpSpeed">0s</div><div class="mp-lbl">Rata-rata</div></div>
+                </div>
+                <div class="metric-pill">
+                    <div class="mp-icon purple"><i class="fas fa-gamepad"></i></div>
+                    <div class="mp-info"><div class="mp-val" id="mpGames">0</div><div class="mp-lbl">Games</div></div>
+                </div>
+                <div class="metric-pill">
+                    <div class="mp-icon orange"><i class="fas fa-fire"></i></div>
+                    <div class="mp-info"><div class="mp-val" id="mpStreak">0</div><div class="mp-lbl">Streak</div></div>
+                </div>
+            </div>
+
+            <!-- Analytics Sub-tabs -->
+            <div class="analytics-tabs">
+                <button class="at-btn active" data-at="overview">Overview</button>
+                <button class="at-btn" data-at="subjects">Per Kelas</button>
+                <button class="at-btn" data-at="history">Riwayat</button>
+            </div>
+
+            <!-- Sub-tab Content -->
+            <div class="at-content" id="atContent">
+                <!-- Overview (default) -->
+                <div class="at-panel active" data-panel="overview">
+                    <div class="chart-card glass">
+                        <h4><i class="fas fa-chart-pie"></i> Akurasi per Kelas</h4>
+                        <div class="accuracy-chart-wrap">
+                            <canvas id="chartAccuracy"></canvas>
+                        </div>
+                    </div>
+                    <div class="mastery-section">
+                        <h4><i class="fas fa-medal"></i> Penguasaan Topik</h4>
+                        <div id="masteryList" class="mastery-list"></div>
+                    </div>
+                </div>
+                <div class="at-panel" data-panel="subjects">
+                    <div id="subjectBreakdown" class="subject-breakdown"></div>
+                </div>
+                <div class="at-panel" data-panel="history">
+                    <div class="history-list" id="historyList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ TAB 4: EXAM ============ -->
+    <div id="examScreen" class="screen">
+        <div class="app-container">
+            <div class="top-bar">
+                <h2 class="page-title"><i class="fas fa-clipboard-list"></i> Ujian</h2>
+            </div>
+
+            <!-- Exam Stats -->
+            <div class="exam-stats-row">
+                <div class="es-card glass">
+                    <div class="es-val" id="examTotal">0</div>
+                    <div class="es-lbl">Total Ujian</div>
+                </div>
+                <div class="es-card glass">
+                    <div class="es-val" id="examAvg">0%</div>
+                    <div class="es-lbl">Rata-rata</div>
+                </div>
+                <div class="es-card glass">
+                    <div class="es-val" id="examBest">0</div>
+                    <div class="es-lbl">Skor Terbaik</div>
+                </div>
+            </div>
+
+            <!-- Available Exams -->
+            <div class="section-header">
+                <h3><i class="fas fa-play-circle"></i> Ujian Tersedia</h3>
+            </div>
+            <div class="exam-list" id="examList"></div>
+
+            <!-- Exam History -->
+            <div class="section-header" style="margin-top:20px">
+                <h3><i class="fas fa-history"></i> Riwayat Ujian</h3>
+            </div>
+            <div class="exam-history" id="examHistory"></div>
+        </div>
+    </div>
+
+    <!-- ============ TAB 5: PROFILE ============ -->
+    <div id="profileScreen" class="screen">
+        <div class="app-container">
+            <div class="top-bar">
+                <h2 class="page-title"><i class="fas fa-user"></i> Profil</h2>
+            </div>
+
+            <!-- Profile Header -->
+            <div class="profile-hero glass">
+                <div class="ph-avatar" id="profileAvatar">🧒</div>
+                <h3 class="ph-name" id="profileName">Petualang</h3>
+                <div class="ph-grade" id="profileGrade">Kelas 1 SD</div>
+                <div class="ph-level">Level <span id="profileLevel">1</span></div>
+                <div class="ph-xp-bar"><div class="ph-xp-fill" id="profileXPFill"></div></div>
+                <div class="ph-xp-text"><span id="profileXP">0</span> XP</div>
+            </div>
+
+            <!-- Stats Summary -->
+            <div class="profile-stats">
+                <div class="ps-item"><div class="ps-val" id="psTotalGames">0</div><div class="ps-lbl">Games</div></div>
+                <div class="ps-item"><div class="ps-val" id="psAccuracy">0%</div><div class="ps-lbl">Akurasi</div></div>
+                <div class="ps-item"><div class="ps-val" id="psStreak">0</div><div class="ps-lbl">Max Streak</div></div>
+                <div class="ps-item"><div class="ps-val" id="psFastest">-</div><div class="ps-lbl">Tercepat</div></div>
+            </div>
+
+            <!-- Achievements -->
+            <div class="section-header">
+                <h3><i class="fas fa-trophy"></i> Prestasi</h3>
+                <div class="ach-counter"><span id="achUnlocked">0</span>/<span id="achTotal">0</span></div>
+            </div>
+            <div class="ach-grid" id="achGrid"></div>
+
+            <!-- Settings -->
+            <div class="section-header" style="margin-top:20px">
+                <h3><i class="fas fa-cog"></i> Pengaturan</h3>
+            </div>
+            <div class="settings-group glass">
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-user"></i><span>Nama</span></div>
+                    <input type="text" id="settingName" class="setting-input" placeholder="Nama kamu..." maxlength="20">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-graduation-cap"></i><span>Kelas</span></div>
+                    <select id="settingGrade" class="setting-input setting-select">
+                        <option value="1">Kelas 1 SD</option>
+                        <option value="2">Kelas 2 SD</option>
+                        <option value="3">Kelas 3 SD</option>
+                        <option value="4">Kelas 4 SD</option>
+                        <option value="5">Kelas 5 SD</option>
+                        <option value="6">Kelas 6 SD</option>
+                        <option value="7">Kelas 7 SMP</option>
+                        <option value="8">Kelas 8 SMP</option>
+                        <option value="9">Kelas 9 SMP</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-birthday-cake"></i><span>Tanggal Lahir</span></div>
+                    <input type="date" id="settingBirthdate" class="setting-input">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-volume-up"></i><span>Suara</span></div>
+                    <label class="toggle"><input type="checkbox" id="settingSound" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-vibrate"></i><span>Vibrasi</span></div>
+                    <label class="toggle"><input type="checkbox" id="settingVibrate" checked><span class="toggle-slider"></span></label>
+                </div>
+            </div>
+            <div class="settings-group glass">
+                <div class="setting-item danger" id="resetDataBtn">
+                    <div class="setting-info"><i class="fas fa-trash-alt"></i><span>Reset Semua Data</span></div>
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+            <div class="app-version">MathQuest v3.0 — Made with ❤️</div>
+        </div>
+    </div>
+
+    <!-- ============ SUBLEVEL ============ -->
+    <div id="subLevelScreen" class="screen">
+        <div class="app-container">
+            <div class="screen-header">
+                <button class="back-btn" data-back="homeScreen"><i class="fas fa-arrow-left"></i></button>
+                <h2 id="slTitle">Kelas 1 SD</h2>
+                <div class="screen-header-badge" id="slBadge">0/5</div>
+            </div>
+            <div class="sl-hero">
+                <div class="sl-hero-icon" id="slHeroIcon">📘</div>
+                <p class="sl-hero-desc" id="slHeroDesc">Penjumlahan & Pengurangan dasar</p>
+            </div>
+            <div class="sl-path" id="slPath"></div>
+        </div>
+    </div>
+
+    <!-- ============ GAME ============ -->
+    <div id="gameScreen" class="screen">
+        <div class="game-top">
+            <button class="back-btn" id="gameBackBtn"><i class="fas fa-times"></i></button>
+            <div class="game-stats-bar">
+                <div class="gs-item"><i class="fas fa-layer-group"></i><span id="gQ">1/10</span></div>
+                <div class="gs-item gs-timer" id="gsTimerWrap"><i class="fas fa-hourglass-half"></i><span id="gTimer">30</span></div>
+                <div class="gs-item gs-score"><i class="fas fa-star"></i><span id="gScore">0</span></div>
+            </div>
+        </div>
+        <div class="game-progress-bar"><div class="game-progress-fill" id="gProgressFill"></div></div>
+        <div class="streak-badge" id="streakBadge">
+            <span class="streak-fire">🔥</span>
+            <span class="streak-num" id="streakNum">0</span>
+            <span class="streak-word">COMBO!</span>
+        </div>
+        <div class="game-body">
+            <div class="q-category" id="qCategory">Penjumlahan</div>
+            <div class="q-card" id="qCard">
+                <div class="q-text" id="qText">2 + 3 = ?</div>
+                <div class="q-hint" id="qHint"></div>
+            </div>
+            <div class="answers-grid" id="answersGrid"></div>
+            <div class="answer-input-wrap" id="answerInputWrap" style="display:none">
+                <input type="text" id="answerInput" class="answer-input" placeholder="Ketik jawaban..." inputmode="decimal" autocomplete="off">
+                <button class="answer-submit" id="answerSubmit"><i class="fas fa-arrow-right"></i></button>
+            </div>
+        </div>
+        <div class="feedback-overlay" id="feedbackOverlay">
+            <div class="fb-content">
+                <div class="fb-emoji" id="fbEmoji">🎉</div>
+                <div class="fb-text" id="fbText">Benar!</div>
+                <div class="fb-detail" id="fbDetail">+15 poin</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ RESULT ============ -->
+    <div id="resultScreen" class="screen">
+        <div class="result-wrap">
+            <div class="result-trophy"><div class="result-trophy-icon" id="resultTrophyIcon">🏆</div></div>
+            <div class="result-stars" id="resultStars">
+                <i class="fas fa-star" data-idx="0"></i>
+                <i class="fas fa-star big" data-idx="1"></i>
+                <i class="fas fa-star" data-idx="2"></i>
+            </div>
+            <h2 class="result-title" id="resultTitle">Luar Biasa!</h2>
+            <p class="result-subtitle" id="resultSub">Kamu jenius!</p>
+            <div class="result-grid">
+                <div class="result-card rc-score"><div class="rc-icon"><i class="fas fa-star"></i></div><div class="rc-val" id="rScore">0</div><div class="rc-label">Skor</div></div>
+                <div class="result-card rc-correct"><div class="rc-icon"><i class="fas fa-check"></i></div><div class="rc-val" id="rCorrect">0/10</div><div class="rc-label">Benar</div></div>
+                <div class="result-card rc-time"><div class="rc-icon"><i class="fas fa-clock"></i></div><div class="rc-val" id="rTime">0s</div><div class="rc-label">Waktu</div></div>
+                <div class="result-card rc-streak"><div class="rc-icon"><i class="fas fa-fire"></i></div><div class="rc-val" id="rStreak">0</div><div class="rc-label">Max Combo</div></div>
+            </div>
+            <div class="result-xp-card">
+                <div class="rxp-earned"><i class="fas fa-bolt"></i> +<span id="rXP">0</span> XP</div>
+                <div class="rxp-bar"><div class="rxp-fill" id="rXPFill"></div></div>
+                <div class="rxp-level">Level <span id="rLevel">1</span></div>
+            </div>
+            <div class="result-btns">
+                <button class="rbtn rbtn-retry" id="rRetry"><i class="fas fa-redo"></i> Ulangi</button>
+                <button class="rbtn rbtn-next" id="rNext"><i class="fas fa-forward"></i> Lanjut</button>
+                <button class="rbtn rbtn-home" id="rHome"><i class="fas fa-home"></i> Beranda</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ BOTTOM NAV (GLOBAL) ============ -->
+    <nav class="bottom-nav" id="bottomNav" style="display:none">
+        <button class="nav-item active" data-screen="homeScreen">
+            <i class="fas fa-home"></i><span>Home</span>
+        </button>
+        <button class="nav-item" data-screen="analyticsScreen">
+            <i class="fas fa-chart-line"></i><span>Analytics</span>
+        </button>
+        <button class="nav-item play-btn" id="navPlayBtn">
+            <div class="play-btn-inner"><i class="fas fa-play"></i></div>
+        </button>
+        <button class="nav-item" data-screen="examScreen">
+            <i class="fas fa-clipboard-list"></i><span>Ujian</span>
+        </button>
+        <button class="nav-item" data-screen="profileScreen">
+            <i class="fas fa-user-circle"></i><span>Profil</span>
+        </button>
+    </nav>
+
+    <!-- ============ PROFILE MODAL ============ -->
+    <div class="modal-overlay" id="profileModal">
+        <div class="modal-card glass">
+            <h3>Edit Profil</h3>
+            <div class="modal-avatar-picker">
+                <div class="avatar-opt selected" data-avatar="🧒">🧒</div>
+                <div class="avatar-opt" data-avatar="👧">👧</div>
+                <div class="avatar-opt" data-avatar="🦸">🦸</div>
+                <div class="avatar-opt" data-avatar="🧑‍🚀">🧑‍🚀</div>
+                <div class="avatar-opt" data-avatar="🧙">🧙</div>
+                <div class="avatar-opt" data-avatar="🥷">🥷</div>
+            </div>
+            <input type="text" id="modalName" class="modal-input" placeholder="Nama kamu..." maxlength="20">
+            <div class="modal-btns">
+                <button class="mbtn mbtn-cancel" id="modalCancel">Batal</button>
+                <button class="mbtn mbtn-save" id="modalSave">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <div class="toast-icon" id="toastIcon">🏆</div>
+        <div class="toast-body">
+            <div class="toast-title" id="toastTitle">Prestasi Baru!</div>
+            <div class="toast-msg" id="toastMsg">Langkah Pertama</div>
+        </div>
+    </div>
+
+    <script src="questions.js?v=6"></script>
+    <script src="game.js?v=6"></script>
+</body>
+</html>

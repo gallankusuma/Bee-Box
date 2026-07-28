@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MathQuest</string>
+    <string name="title_activity_main">MathQuest</string>
+    <string name="package_name">com.mathquest.app</string>
+    <string name="custom_url_scheme">com.mathquest.app</string>
+</resources>
