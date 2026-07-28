@@ -72,6 +72,7 @@
                     <h2>Kelas Saya</h2>
                     <button class="btn btn-primary" id="newClassBtn"><i class="fas fa-plus"></i> Buat Kelas</button>
                 </div>
+                <div class="stat-row" id="dashboardStatRow" style="display:none"></div>
                 <div id="classGrid" class="class-grid"></div>
                 <div id="classEmpty" class="empty-state" style="display:none">
                     <i class="fas fa-chalkboard"></i>
@@ -83,16 +84,35 @@
             <section id="classDetailView" class="view">
                 <div class="view-header">
                     <button class="btn btn-ghost btn-back" id="backToDashboard"><i class="fas fa-arrow-left"></i> Kembali</button>
-                    <div>
+                    <div class="class-detail-title">
                         <h2 id="classDetailName">-</h2>
                         <p class="join-code-line">Kode Gabung: <span id="classDetailCode" class="join-code"></span></p>
+                    </div>
+                    <div class="class-detail-actions">
+                        <button class="btn btn-ghost" id="editClassBtn"><i class="fas fa-pen"></i> Edit</button>
+                        <button class="btn btn-ghost btn-danger" id="deleteClassBtn"><i class="fas fa-trash-alt"></i> Hapus</button>
+                    </div>
+                </div>
+
+                <div class="stat-row" id="classStatRow"></div>
+
+                <div class="roster-toolbar">
+                    <h3 class="section-title">Daftar Siswa</h3>
+                    <div class="sort-group">
+                        <label for="rosterSort">Urutkan:</label>
+                        <select id="rosterSort">
+                            <option value="name">Nama</option>
+                            <option value="xp">XP Tertinggi</option>
+                            <option value="accuracy">Akurasi Tertinggi</option>
+                            <option value="lastPlayed">Terakhir Main</option>
+                        </select>
                     </div>
                 </div>
                 <table class="roster-table">
                     <thead>
                         <tr>
-                            <th>Siswa</th><th>Kelas</th><th>Level</th><th>XP</th>
-                            <th>Akurasi</th><th>Games</th><th>Max Combo</th><th>Terakhir Main</th>
+                            <th>#</th><th>Siswa</th><th>Kelas</th><th>Level</th><th>XP</th>
+                            <th>Akurasi</th><th>Games</th><th>Max Combo</th><th>Terakhir Main</th><th></th>
                         </tr>
                     </thead>
                     <tbody id="rosterBody"></tbody>
@@ -157,6 +177,48 @@
             <div class="modal-btns">
                 <button class="btn btn-ghost" id="newClassCancel">Batal</button>
                 <button class="btn btn-primary" id="newClassSubmit">Buat Kelas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ EDIT CLASS MODAL ============ -->
+    <div class="modal-overlay" id="editClassModal">
+        <div class="modal-card">
+            <h3>Edit Kelas</h3>
+            <div class="field">
+                <label for="editClassName">Nama Kelas</label>
+                <input type="text" id="editClassName">
+            </div>
+            <div class="field">
+                <label for="editClassGrade">Tingkat Kelas</label>
+                <select id="editClassGrade">
+                    <option value="1">Kelas 1 SD</option>
+                    <option value="2">Kelas 2 SD</option>
+                    <option value="3">Kelas 3 SD</option>
+                    <option value="4">Kelas 4 SD</option>
+                    <option value="5">Kelas 5 SD</option>
+                    <option value="6">Kelas 6 SD</option>
+                    <option value="7">Kelas 7 SMP</option>
+                    <option value="8">Kelas 8 SMP</option>
+                    <option value="9">Kelas 9 SMP</option>
+                </select>
+            </div>
+            <div class="error-box" id="editClassError" style="display:none"></div>
+            <div class="modal-btns">
+                <button class="btn btn-ghost" id="editClassCancel">Batal</button>
+                <button class="btn btn-primary" id="editClassSubmit">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ CONFIRM MODAL (delete class / remove student) ============ -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal-card">
+            <h3 id="confirmTitle">Konfirmasi</h3>
+            <p id="confirmMsg" class="confirm-msg"></p>
+            <div class="modal-btns">
+                <button class="btn btn-ghost" id="confirmCancel">Batal</button>
+                <button class="btn btn-danger" id="confirmOk">Ya, Lanjutkan</button>
             </div>
         </div>
     </div>

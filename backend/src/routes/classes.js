@@ -89,6 +89,51 @@ router.get('/:id/students/:studentId', requireAuth, requireRole('TEACHER'), asyn
   });
 });
 
+// PATCH /api/classes/:id - rename a class or move it to a different grade band.
+router.patch('/:id', requireAuth, requireRole('TEACHER'), async (req, res) => {
+  const cls = await prisma.class.findUnique({ where: { id: req.params.id } });
+  if(!cls || cls.teacherId !== req.auth.userId) return res.status(404).json({ error: 'Class not found' });
+
+  const { name, grade } = req.body || {};
+  const data = {};
+  if(typeof name === 'string' && name.trim()) data.name = name.trim();
+  if(grade !== undefined) {
+    const gradeNum = parseInt(grade, 10);
+    if(!GRADE_CONFIG[gradeNum]) return res.status(400).json({ error: 'Invalid grade' });
+    data.grade = gradeNum;
+  }
+  if(Object.keys(data).length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  const updated = await prisma.class.update({ where: { id: cls.id }, data });
+  res.json(updated);
+});
+
+// DELETE /api/classes/:id - removes the class and every enrollment in it
+// (students and their game data are untouched, only the roster link is gone).
+router.delete('/:id', requireAuth, requireRole('TEACHER'), async (req, res) => {
+  const cls = await prisma.class.findUnique({ where: { id: req.params.id } });
+  if(!cls || cls.teacherId !== req.auth.userId) return res.status(404).json({ error: 'Class not found' });
+
+  await prisma.classEnrollment.deleteMany({ where: { classId: cls.id } });
+  await prisma.class.delete({ where: { id: cls.id } });
+  res.json({ ok: true });
+});
+
+// DELETE /api/classes/:id/students/:studentId - removes one student from the
+// roster only; the student's account and game history are untouched.
+router.delete('/:id/students/:studentId', requireAuth, requireRole('TEACHER'), async (req, res) => {
+  const cls = await prisma.class.findUnique({ where: { id: req.params.id } });
+  if(!cls || cls.teacherId !== req.auth.userId) return res.status(404).json({ error: 'Class not found' });
+
+  const enrollment = await prisma.classEnrollment.findUnique({
+    where: { classId_studentId: { classId: cls.id, studentId: req.params.studentId } }
+  });
+  if(!enrollment) return res.status(404).json({ error: 'Student is not enrolled in this class' });
+
+  await prisma.classEnrollment.delete({ where: { id: enrollment.id } });
+  res.json({ ok: true });
+});
+
 // POST /api/classes/join - a student enrolls themself using a teacher's join code.
 router.post('/join', requireAuth, requireRole('STUDENT'), async (req, res) => {
   const { joinCode } = req.body || {};
