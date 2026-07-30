@@ -14,18 +14,18 @@ router.post('/claim', requireAuth, requireRole('PARENT'), async (req, res) => {
   const student = await prisma.studentProfile.findUnique({ where: { linkCode: linkCode.toUpperCase() }, include: { user: true } });
   if(!student) return res.status(404).json({ error: 'No student found for that code' });
 
-  const existing = await prisma.parentLink.findUnique({
+  const existing = await prisma.guardianStudentRelationship.findUnique({
     where: { parentId_studentId: { parentId: req.auth.userId, studentId: student.id } }
   });
   if(existing) return res.status(409).json({ error: 'Already linked to this student' });
 
-  await prisma.parentLink.create({ data: { parentId: req.auth.userId, studentId: student.id } });
+  await prisma.guardianStudentRelationship.create({ data: { parentId: req.auth.userId, studentId: student.id } });
   res.status(201).json({ ok: true, studentName: student.user.name });
 });
 
 // GET /api/parent-links/children - read-only summaries of every linked student.
 router.get('/children', requireAuth, requireRole('PARENT'), async (req, res) => {
-  const links = await prisma.parentLink.findMany({
+  const links = await prisma.guardianStudentRelationship.findMany({
     where: { parentId: req.auth.userId },
     include: { student: { include: { user: true } } }
   });
@@ -34,7 +34,7 @@ router.get('/children', requireAuth, requireRole('PARENT'), async (req, res) => 
 
 // GET /api/parent-links/children/:studentId - full read-only detail for one linked child.
 router.get('/children/:studentId', requireAuth, requireRole('PARENT'), async (req, res) => {
-  const link = await prisma.parentLink.findUnique({
+  const link = await prisma.guardianStudentRelationship.findUnique({
     where: { parentId_studentId: { parentId: req.auth.userId, studentId: req.params.studentId } }
   });
   if(!link) return res.status(404).json({ error: 'Not linked to this student' });

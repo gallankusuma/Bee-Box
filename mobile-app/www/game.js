@@ -81,6 +81,12 @@ const defaults = () => ({
 
 let S = defaults();
 
+// Which mode the logged-in account is in, and (for PARENT) which linked
+// children it can see. Kept separate from the STUDENT-shaped `S` above.
+let CURRENT_ROLE = null;
+let CURRENT_USER = null;
+let PARENT = { children: [], activeStudentId: null, activeDetail: null };
+
 // Pulls the latest profile from the server and replaces S wholesale - the
 // server is the single source of truth now, S is just a render-friendly cache.
 async function syncProfile() {
@@ -159,9 +165,42 @@ function showScreen(id) {
   // Bottom nav visibility control
   const nav = $('bottomNav');
   if(nav) {
-    const showNav = ['homeScreen', 'analyticsScreen', 'examScreen', 'profileScreen'].includes(id);
+    const showNav = ['homeScreen', 'analyticsScreen', 'examScreen', 'profileScreen', 'parentHomeScreen', 'parentProfileScreen'].includes(id);
     nav.style.display = showNav ? 'flex' : 'none';
   }
+}
+
+// Swaps #bottomNav's buttons between the student set (Home/Analytics/Play/Ujian/Profil)
+// and a 2-item parent set (no Attendance/Calendar/Inbox - no data backs them yet).
+// Nav clicks are handled via delegation on #bottomNav itself (see DOMContentLoaded),
+// so replacing its innerHTML here never leaves stale/unwired buttons behind.
+function setNavForRole(role) {
+  const nav = $('bottomNav');
+  if(!nav) return;
+  nav.innerHTML = role === 'PARENT' ? `
+    <button class="nav-item" data-screen="parentHomeScreen">
+      <i class="fas fa-child"></i><span>Anak Saya</span>
+    </button>
+    <button class="nav-item" data-screen="parentProfileScreen">
+      <i class="fas fa-user-circle"></i><span>Profil</span>
+    </button>
+  ` : `
+    <button class="nav-item" data-screen="homeScreen">
+      <i class="fas fa-home"></i><span>Home</span>
+    </button>
+    <button class="nav-item" data-screen="analyticsScreen">
+      <i class="fas fa-chart-line"></i><span>Analytics</span>
+    </button>
+    <button class="nav-item play-btn" id="navPlayBtn">
+      <div class="play-btn-inner"><i class="fas fa-play"></i></div>
+    </button>
+    <button class="nav-item" data-screen="examScreen">
+      <i class="fas fa-clipboard-list"></i><span>Ujian</span>
+    </button>
+    <button class="nav-item" data-screen="profileScreen">
+      <i class="fas fa-user-circle"></i><span>Profil</span>
+    </button>
+  `;
 }
 
 // === PARTICLES EFFECT ===
@@ -1033,11 +1072,122 @@ function formatDuration(sec) {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
+// === PARENT MODE ===
+async function syncParentChildren() {
+  const data = await Api.get('/parent-links/children');
+  PARENT.children = data.children;
+}
+
+async function syncParentChildDetail(studentId) {
+  const data = await Api.get(`/parent-links/children/${studentId}`);
+  PARENT.activeStudentId = studentId;
+  PARENT.activeDetail = data;
+}
+
+function renderParentChildChips() {
+  const container = $('parentChildChips');
+  if(!container) return;
+  container.innerHTML = '';
+  if(PARENT.children.length <= 1) return; // no chip row needed for a single child
+
+  PARENT.children.forEach(c => {
+    const chip = document.createElement('div');
+    chip.className = 'child-chip' + (c.studentId === PARENT.activeStudentId ? ' active' : '');
+    chip.innerHTML = `<span class="chip-avatar">${c.avatar}</span><span>${c.name}</span>`;
+    chip.addEventListener('click', async () => {
+      if(c.studentId === PARENT.activeStudentId) return;
+      await syncParentChildDetail(c.studentId);
+      renderParentHome();
+    });
+    container.appendChild(chip);
+  });
+}
+
+function renderParentHome() {
+  const d = PARENT.activeDetail;
+  if(!d) return;
+  renderParentChildChips();
+
+  $('parentHeroName').textContent = d.name;
+  $('parentHeroLevel').textContent = d.level;
+  $('parentHeroStreak').textContent = d.streak;
+  $('parentHeroAccuracy').textContent = `${d.accuracy}%`;
+  $('parentHeroGradeBadge').textContent = getGradeLabel(d.grade);
+  $('parentPsGames').textContent = d.totalGames;
+  $('parentPsAccuracy').textContent = `${d.accuracy}%`;
+  $('parentPsStreak').textContent = d.maxStreak;
+
+  const list = $('parentActivityList');
+  list.innerHTML = '';
+  if(!d.history || d.history.length === 0) {
+    list.innerHTML = '<div class="empty-msg"><i class="fas fa-history"></i>Belum ada aktivitas</div>';
+    return;
+  }
+  d.history.forEach(h => {
+    const cfg = GRADE_CONFIG[h.grade] || { icon: '📝', name: 'Ujian' };
+    const div = document.createElement('div');
+    div.className = 'h-item';
+    div.innerHTML = `
+      <div class="h-badge" style="background: ${h.isExam ? 'var(--neonPk)' : 'var(--neonB)'}">${h.isExam ? '📝' : cfg.icon}</div>
+      <div class="h-info">
+        <h5>${h.isExam ? 'Ujian Matematika' : cfg.name}</h5>
+        <p>${new Date(h.date).toLocaleDateString('id-ID')} • ${h.correct} Benar • ${h.duration}s</p>
+      </div>
+      <div class="h-score">${h.score} PTS</div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function renderParentProfile() {
+  $('parentProfileAvatar').textContent = CURRENT_USER?.avatar || '🧑';
+  $('parentProfileName').textContent = CURRENT_USER?.name || 'Orang Tua';
+
+  const list = $('parentChildrenList');
+  list.innerHTML = '';
+  if(PARENT.children.length === 0) {
+    list.innerHTML = '<div class="empty-msg"><i class="fas fa-child"></i>Belum ada anak terhubung</div>';
+    return;
+  }
+  PARENT.children.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'setting-item';
+    row.innerHTML = `
+      <div class="setting-info"><i class="fas fa-child"></i><span>${c.avatar} ${c.name}</span></div>
+      <span class="link-code-pill">${getGradeLabel(c.grade)}</span>
+    `;
+    list.appendChild(row);
+  });
+}
+
+// Routes a PARENT session to the right screen: straight to the claim flow if
+// they have no linked children yet, otherwise to the first child's home.
+async function bootParentMode() {
+  CURRENT_ROLE = 'PARENT';
+  setNavForRole('PARENT');
+  await syncParentChildren();
+  if(PARENT.children.length === 0) {
+    $('parentClaimGotoHome').style.display = 'none';
+    showScreen('parentClaimScreen');
+    return;
+  }
+  await syncParentChildDetail(PARENT.children[0].studentId);
+  showScreen('parentHomeScreen');
+  renderParentHome();
+}
+
 // === AUTH / SESSION BOOTSTRAP ===
 async function tryRestoreSession() {
   if(!getAccessToken()) return false;
   try {
-    await syncProfile();
+    const me = await Api.get('/auth/me');
+    CURRENT_USER = me.user;
+    CURRENT_ROLE = me.user.role;
+    if(CURRENT_ROLE === 'PARENT') {
+      await bootParentMode();
+    } else {
+      await syncProfile();
+    }
     return true;
   } catch(e) {
     clearTokens();
@@ -1048,6 +1198,10 @@ async function tryRestoreSession() {
 function logout() {
   clearTokens();
   S = defaults();
+  CURRENT_ROLE = null;
+  CURRENT_USER = null;
+  PARENT = { children: [], activeStudentId: null, activeDetail: null };
+  setNavForRole('STUDENT');
   showScreen('loginScreen');
 }
 
@@ -1069,8 +1223,12 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const restored = await tryRestoreSession();
       if(restored) {
-        showScreen('homeScreen');
-        await renderHome();
+        if(CURRENT_ROLE === 'PARENT') {
+          // tryRestoreSession() already routed to the right parent screen via bootParentMode()
+        } else {
+          showScreen('homeScreen');
+          await renderHome();
+        }
       } else {
         showScreen('onboardingScreen');
       }
@@ -1080,9 +1238,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 2200);
 
-  // 5-Tab Navigation click events
-  document.querySelectorAll('.nav-item[data-screen]').forEach(n => {
-    n.addEventListener('click', async () => {
+  // Bottom nav clicks - delegated on the container (not the buttons) so
+  // setNavForRole() can freely swap #bottomNav's innerHTML between the
+  // student and parent button sets without leaving anything unwired.
+  const bottomNavEl = safeEl('bottomNav');
+  if(bottomNavEl) {
+    bottomNavEl.addEventListener('click', async (e) => {
+      if(e.target.closest('#navPlayBtn')) { AudioFX.click(); quickPlay(); return; }
+      const n = e.target.closest('.nav-item[data-screen]');
+      if(!n) return;
       AudioFX.click();
       const sc = n.dataset.screen;
       showScreen(sc);
@@ -1090,8 +1254,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if(sc === 'analyticsScreen') await renderStats();
       if(sc === 'examScreen') await renderExams();
       if(sc === 'profileScreen') await renderProfile();
+      if(sc === 'parentHomeScreen') renderParentHome();
+      if(sc === 'parentProfileScreen') renderParentProfile();
     });
-  });
+  }
 
   // Timeframe selector clicks (Stockbit area chart timeframe switching)
   document.querySelectorAll('.tf-btn').forEach(b => {
@@ -1190,9 +1356,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const dcBtn = safeEl('dailyChallengeBtn');
   if(dcBtn) dcBtn.addEventListener('click', () => { AudioFX.click(); dailyChallenge(); });
-
-  const npBtn = safeEl('navPlayBtn');
-  if(npBtn) npBtn.addEventListener('click', () => { AudioFX.click(); quickPlay(); });
+  // navPlayBtn is handled by the delegated #bottomNav listener above (it gets
+  // recreated whenever setNavForRole() swaps the nav's innerHTML).
 
   // Result screen navigation actions
   const retryBtn = safeEl('rRetry');
@@ -1418,8 +1583,14 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const data = await Api.post('/auth/login', { username, password }, { noAuth: true });
         setTokens(data.accessToken, data.refreshToken);
-        showScreen('homeScreen');
-        await renderHome();
+        CURRENT_USER = data.user;
+        CURRENT_ROLE = data.user.role;
+        if(CURRENT_ROLE === 'PARENT') {
+          await bootParentMode();
+        } else {
+          showScreen('homeScreen');
+          await renderHome();
+        }
       } catch(e) {
         errEl.textContent = 'Username atau password salah';
         errEl.style.display = 'block';
@@ -1434,6 +1605,94 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const gotoRegister = safeEl('loginGotoRegister');
   if(gotoRegister) gotoRegister.addEventListener('click', (e) => { e.preventDefault(); showScreen('onboardingScreen'); });
+
+  // === PARENT MODE EVENT LISTENERS ===
+  const gotoParentRegister = safeEl('loginGotoParentRegister');
+  if(gotoParentRegister) gotoParentRegister.addEventListener('click', (e) => { e.preventDefault(); showScreen('parentRegisterScreen'); });
+
+  const parentRegGotoLogin = safeEl('parentRegGotoLogin');
+  if(parentRegGotoLogin) parentRegGotoLogin.addEventListener('click', (e) => { e.preventDefault(); showScreen('loginScreen'); });
+
+  const parentRegSubmit = safeEl('parentRegSubmit');
+  if(parentRegSubmit) {
+    parentRegSubmit.addEventListener('click', async () => {
+      const name = safeEl('parentRegName')?.value.trim();
+      const username = safeEl('parentRegUsername')?.value.trim();
+      const password = safeEl('parentRegPassword')?.value || '';
+      const errEl = safeEl('parentRegError');
+      errEl.style.display = 'none';
+
+      if(!name || !username || !password) {
+        errEl.textContent = 'Semua kolom wajib diisi';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      parentRegSubmit.disabled = true;
+      try {
+        const data = await Api.post('/auth/register', { username, password, role: 'PARENT', name }, { noAuth: true });
+        setTokens(data.accessToken, data.refreshToken);
+        CURRENT_USER = data.user;
+        CURRENT_ROLE = 'PARENT';
+        setNavForRole('PARENT');
+        showScreen('parentClaimScreen');
+      } catch(e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+      } finally {
+        parentRegSubmit.disabled = false;
+      }
+    });
+  }
+
+  const parentClaimBtn = safeEl('parentClaimBtn');
+  if(parentClaimBtn) {
+    parentClaimBtn.addEventListener('click', async () => {
+      const code = safeEl('parentClaimCode')?.value.trim();
+      const msgEl = safeEl('parentClaimMsg');
+      msgEl.style.display = 'none';
+      msgEl.classList.remove('error');
+      if(!code) return;
+
+      parentClaimBtn.disabled = true;
+      try {
+        await Api.post('/parent-links/claim', { linkCode: code });
+        safeEl('parentClaimCode').value = '';
+        await bootParentMode();
+      } catch(err) {
+        msgEl.textContent = err.message;
+        msgEl.classList.add('error');
+        msgEl.style.display = 'block';
+      } finally {
+        parentClaimBtn.disabled = false;
+      }
+    });
+  }
+
+  const parentClaimGotoHome = safeEl('parentClaimGotoHome');
+  if(parentClaimGotoHome) {
+    parentClaimGotoHome.querySelector('a')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      showScreen('parentHomeScreen');
+      renderParentHome();
+    });
+  }
+
+  function openAddChildFlow() {
+    safeEl('parentClaimGotoHome').style.display = PARENT.children.length > 0 ? 'block' : 'none';
+    showScreen('parentClaimScreen');
+  }
+  const parentAddChildBtn = safeEl('parentAddChildBtn');
+  if(parentAddChildBtn) parentAddChildBtn.addEventListener('click', openAddChildFlow);
+  const parentProfileAddChildBtn = safeEl('parentProfileAddChildBtn');
+  if(parentProfileAddChildBtn) parentProfileAddChildBtn.addEventListener('click', openAddChildFlow);
+
+  const parentLogoutBtn = safeEl('parentLogoutBtn');
+  if(parentLogoutBtn) {
+    parentLogoutBtn.addEventListener('click', () => {
+      if(confirm('Keluar dari akun ini?')) logout();
+    });
+  }
 
   // Settings: Grade change
   const sGrade = safeEl('settingGrade');

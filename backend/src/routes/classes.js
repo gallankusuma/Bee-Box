@@ -25,7 +25,7 @@ router.post('/', requireAuth, requireRole('TEACHER'), async (req, res) => {
 
   const joinCode = await uniqueJoinCode();
   const cls = await prisma.class.create({
-    data: { teacherId: req.auth.userId, name: name.trim(), grade: gradeNum, joinCode }
+    data: { teacherId: req.auth.userId, schoolId: req.auth.schoolId, name: name.trim(), grade: gradeNum, joinCode }
   });
   res.status(201).json(cls);
 });

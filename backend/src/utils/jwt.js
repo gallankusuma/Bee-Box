@@ -9,8 +9,9 @@ if(!ACCESS_SECRET || !REFRESH_SECRET) {
   throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be set (see .env.example)');
 }
 
-function signAccessToken(user) {
-  return jwt.sign({ sub: user.id, role: user.role }, ACCESS_SECRET, { expiresIn: ACCESS_TTL });
+function signAccessToken(user, roleAssignment) {
+  const payload = { sub: user.id, role: roleAssignment.role, schoolId: roleAssignment.schoolId, raid: roleAssignment.id };
+  return jwt.sign(payload, ACCESS_SECRET, { expiresIn: ACCESS_TTL });
 }
 
 function signRefreshToken(user) {

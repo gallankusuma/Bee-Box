@@ -5,6 +5,8 @@ const { isValidRole } = require('../utils/roles');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { requireAuth } = require('../middleware/auth');
 const { generateCode } = require('../utils/codes');
+const { getDefaultSchoolId } = require('../utils/school');
+const { getActiveRoleAssignment } = require('../utils/roleAssignment');
 
 async function uniqueLinkCode() {
   for(let i = 0; i < 5; i++) {
@@ -17,8 +19,8 @@ async function uniqueLinkCode() {
 
 const router = express.Router();
 
-function publicUser(user) {
-  return { id: user.id, name: user.name, avatar: user.avatar, role: user.role, username: user.username, email: user.email };
+function publicUser(user, roleAssignment) {
+  return { id: user.id, name: user.name, avatar: user.avatar, role: roleAssignment.role, username: user.username, email: user.email };
 }
 
 // POST /api/auth/register
@@ -46,32 +48,41 @@ router.post('/register', async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const linkCode = role === 'STUDENT' ? await uniqueLinkCode() : null;
+  const schoolId = await getDefaultSchoolId();
 
-  const user = await prisma.user.create({
-    data: {
-      username: username || null,
-      email: email || null,
-      passwordHash,
-      role,
-      name: name.trim(),
-      avatar: avatar || '🧒',
-      ...(role === 'STUDENT' ? {
-        studentProfile: {
-          create: {
-            birthdate: birthdate || null,
-            grade: parseInt(grade, 10),
-            unlockedGrades: JSON.stringify(Array.from({ length: parseInt(grade, 10) }, (_, i) => i + 1)),
-            linkCode
+  const { user, roleAssignment } = await prisma.$transaction(async (tx) => {
+    const person = await tx.person.create({ data: { fullName: name.trim() } });
+
+    const user = await tx.user.create({
+      data: {
+        personId: person.id,
+        username: username || null,
+        email: email || null,
+        passwordHash,
+        name: name.trim(),
+        avatar: avatar || '🧒',
+        ...(role === 'STUDENT' ? {
+          studentProfile: {
+            create: {
+              birthdate: birthdate || null,
+              grade: parseInt(grade, 10),
+              unlockedGrades: JSON.stringify(Array.from({ length: parseInt(grade, 10) }, (_, i) => i + 1)),
+              linkCode
+            }
           }
-        }
-      } : {})
-    },
-    include: { studentProfile: true }
+        } : {})
+      },
+      include: { studentProfile: true }
+    });
+
+    const roleAssignment = await tx.roleAssignment.create({ data: { userId: user.id, role, schoolId } });
+
+    return { user, roleAssignment };
   });
 
-  const accessToken = signAccessToken(user);
+  const accessToken = signAccessToken(user, roleAssignment);
   const refreshToken = signRefreshToken(user);
-  res.status(201).json({ user: publicUser(user), studentProfile: user.studentProfile || null, accessToken, refreshToken });
+  res.status(201).json({ user: publicUser(user, roleAssignment), studentProfile: user.studentProfile || null, accessToken, refreshToken });
 });
 
 // POST /api/auth/login
@@ -88,9 +99,12 @@ router.post('/login', async (req, res) => {
   const ok = await bcrypt.compare(password, user.passwordHash);
   if(!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-  const accessToken = signAccessToken(user);
+  const roleAssignment = await getActiveRoleAssignment(user.id);
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+  const accessToken = signAccessToken(user, roleAssignment);
   const refreshToken = signRefreshToken(user);
-  res.json({ user: publicUser(user), studentProfile: user.studentProfile || null, accessToken, refreshToken });
+  res.json({ user: publicUser(user, roleAssignment), studentProfile: user.studentProfile || null, accessToken, refreshToken });
 });
 
 // POST /api/auth/refresh
@@ -108,14 +122,16 @@ router.post('/refresh', async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if(!user) return res.status(401).json({ error: 'User no longer exists' });
 
-  res.json({ accessToken: signAccessToken(user), refreshToken: signRefreshToken(user) });
+  const roleAssignment = await getActiveRoleAssignment(user.id);
+  res.json({ accessToken: signAccessToken(user, roleAssignment), refreshToken: signRefreshToken(user) });
 });
 
 // GET /api/auth/me
 router.get('/me', requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.auth.userId }, include: { studentProfile: true } });
   if(!user) return res.status(404).json({ error: 'User not found' });
-  res.json({ user: publicUser(user), studentProfile: user.studentProfile || null });
+  const roleAssignment = await getActiveRoleAssignment(user.id);
+  res.json({ user: publicUser(user, roleAssignment), studentProfile: user.studentProfile || null });
 });
 
 module.exports = router;

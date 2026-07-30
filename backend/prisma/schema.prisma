@@ -7,21 +7,71 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// SQLite has no native enum support in Prisma, so Role is validated in
-// application code (see src/utils/roles.js) against: STUDENT | PARENT | TEACHER
-model User {
-  id           String   @id @default(cuid())
-  email        String?  @unique
-  username     String?  @unique
-  passwordHash String
-  role         String
-  name         String
-  avatar       String   @default("🧒")
-  createdAt    DateTime @default(now())
+// One row per human identity. A Person can exist in school data independent of
+// whether they have a login (User) yet - kept thin for now (see RoleAssignment
+// for how login accounts get their role/school).
+model Person {
+  id          String   @id @default(cuid())
+  fullName    String
+  dateOfBirth String?
+  gender      String?
+  photoUrl    String?
+  createdAt   DateTime @default(now())
 
-  studentProfile StudentProfile?
-  teacherClasses Class[]      @relation("TeacherClasses")
-  parentLinks    ParentLink[] @relation("ParentSide")
+  user User?
+}
+
+// A school/tenant. Single-tenant in practice today (one row), but every
+// place a school affiliation matters gets a real FK to this, not a shortcut.
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+
+  roleAssignments RoleAssignment[]
+  classes         Class[]
+}
+
+// Role now lives on RoleAssignment (one user can eventually hold several);
+// User itself only identifies the login account.
+model User {
+  id           String    @id @default(cuid())
+  personId     String    @unique
+  person       Person    @relation(fields: [personId], references: [id])
+  email        String?   @unique
+  username     String?   @unique
+  passwordHash String
+  name         String
+  avatar       String    @default("🧒")
+  status       String    @default("ACTIVE")
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  roleAssignments RoleAssignment[]
+  studentProfile  StudentProfile?
+  teacherClasses  Class[]                     @relation("TeacherClasses")
+  guardianLinks   GuardianStudentRelationship[] @relation("ParentSide")
+}
+
+// The source of truth for "what role does this account have" - replaces the
+// old User.role scalar. One user can (eventually) hold multiple assignments;
+// scopeType/scopeId are reserved for later per-class/subject/period scoping
+// and are always null for now.
+model RoleAssignment {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  role        String
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id])
+  scopeType   String?
+  scopeId     String?
+  validFrom   DateTime  @default(now())
+  validUntil  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // One row per student. Mirrors the old localStorage `S` shape so nothing
@@ -51,7 +101,7 @@ model StudentProfile {
   exams            ExamAttempt[]
   achievements     StudentAchievement[]
   classEnrollments ClassEnrollment[]
-  parentLinks      ParentLink[]         @relation("StudentSide")
+  guardianLinks    GuardianStudentRelationship[] @relation("StudentSide")
 }
 
 // Per grade + sub-level completion/star rating (replaces S.gp[grade].subs[sub]).
@@ -135,6 +185,8 @@ model Class {
   id        String   @id @default(cuid())
   teacherId String
   teacher   User     @relation("TeacherClasses", fields: [teacherId], references: [id])
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id])
   name      String
   grade     Int
   joinCode  String   @unique
@@ -155,13 +207,21 @@ model ClassEnrollment {
 }
 
 // Parent gets read-only visibility into a student's progress via a link code.
-model ParentLink {
-  id        String         @id @default(cuid())
-  parentId  String
-  parent    User           @relation("ParentSide", fields: [parentId], references: [id])
-  studentId String
-  student   StudentProfile @relation("StudentSide", fields: [studentId], references: [id])
-  linkedAt  DateTime       @default(now())
+// Claiming a code is inherently self-verifying, so verificationStatus defaults
+// to VERIFIED - there's no separate approval step today.
+model GuardianStudentRelationship {
+  id                     String         @id @default(cuid())
+  parentId               String
+  parent                 User           @relation("ParentSide", fields: [parentId], references: [id])
+  studentId              String
+  student                StudentProfile @relation("StudentSide", fields: [studentId], references: [id])
+  relationshipType       String         @default("PARENT")
+  legalGuardian          Boolean        @default(true)
+  pickupPermission       Boolean        @default(false)
+  emergencyContact       Boolean        @default(false)
+  verificationStatus     String         @default("VERIFIED")
+  communicationPriority  Int            @default(1)
+  linkedAt               DateTime       @default(now())
 
   @@unique([parentId, studentId])
 }

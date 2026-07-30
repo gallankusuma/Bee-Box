@@ -159,7 +159,144 @@
                 <div class="ob-error" id="loginError" style="display:none"></div>
                 <button class="ob-btn ob-next" id="loginSubmit">Masuk <i class="fas fa-arrow-right"></i></button>
                 <p class="ob-switch-link">Belum punya akun? <a href="#" id="loginGotoRegister">Daftar di sini</a></p>
+                <p class="ob-switch-link">Saya orang tua, <a href="#" id="loginGotoParentRegister">Daftar di sini</a></p>
             </div>
+        </div>
+    </div>
+
+    <!-- ============ PARENT: REGISTER ============ -->
+    <div id="parentRegisterScreen" class="screen">
+        <div class="ob-container">
+            <div class="ob-header">
+                <div class="ob-logo">👨‍👩‍👧</div>
+                <h1>Daftar sebagai <span class="neon-text">Orang Tua</span></h1>
+                <p class="ob-desc">Pantau progres belajar anak kamu di MathQuest.</p>
+            </div>
+            <div class="ob-step active" data-step="1">
+                <div class="ob-field">
+                    <label for="parentRegName">Nama</label>
+                    <input type="text" id="parentRegName" class="ob-input" placeholder="Nama kamu" maxlength="30">
+                </div>
+                <div class="ob-field">
+                    <label for="parentRegUsername">Username</label>
+                    <input type="text" id="parentRegUsername" class="ob-input" placeholder="Pilih username" autocomplete="username">
+                </div>
+                <div class="ob-field">
+                    <label for="parentRegPassword">Password</label>
+                    <input type="password" id="parentRegPassword" class="ob-input" placeholder="Minimal 6 karakter" autocomplete="new-password">
+                </div>
+                <div class="ob-error" id="parentRegError" style="display:none"></div>
+                <button class="ob-btn ob-next" id="parentRegSubmit">Daftar <i class="fas fa-arrow-right"></i></button>
+                <p class="ob-switch-link">Sudah punya akun? <a href="#" id="parentRegGotoLogin">Masuk di sini</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ PARENT: CLAIM CHILD ============ -->
+    <div id="parentClaimScreen" class="screen">
+        <div class="ob-container">
+            <div class="ob-header">
+                <div class="ob-logo">🔗</div>
+                <h1>Hubungkan ke <span class="neon-text">Anak Kamu</span></h1>
+                <p class="ob-desc">Minta kode dari halaman Profil anak kamu ("Kode buat Orang Tua"), lalu masukkan di bawah ini.</p>
+            </div>
+            <div class="ob-step active" data-step="1">
+                <div class="join-class-row">
+                    <input type="text" id="parentClaimCode" class="setting-input ob-input" placeholder="Kode dari anak" maxlength="6">
+                    <button class="join-class-btn" id="parentClaimBtn">Hubungkan</button>
+                </div>
+                <div id="parentClaimMsg" class="join-class-msg" style="display:none"></div>
+                <p class="ob-switch-link" id="parentClaimGotoHome" style="display:none"><a href="#">Kembali ke Beranda</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ PARENT: HOME ============ -->
+    <div id="parentHomeScreen" class="screen">
+        <div class="app-container">
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <div class="mini-logo">🧠</div>
+                    <span class="mini-logo-text">Math<span>Quest</span></span>
+                </div>
+            </div>
+
+            <div class="child-chip-row" id="parentChildChips"></div>
+
+            <!-- Child Hero Card -->
+            <div class="hero-card">
+                <div class="hero-bg-pattern"></div>
+                <div class="hero-content">
+                    <div class="hero-greeting">
+                        <span class="hero-wave">👀</span>
+                        <div>
+                            <p class="hero-hello">Memantau</p>
+                            <h2 class="hero-name" id="parentHeroName">Anak</h2>
+                        </div>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat">
+                            <div class="hero-stat-val" id="parentHeroLevel">1</div>
+                            <div class="hero-stat-lbl">Level</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-stat">
+                            <div class="hero-stat-val" id="parentHeroStreak">0</div>
+                            <div class="hero-stat-lbl">🔥 Streak</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-stat">
+                            <div class="hero-stat-val" id="parentHeroAccuracy">0%</div>
+                            <div class="hero-stat-lbl">Akurasi</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-grade-badge" id="parentHeroGradeBadge">Kelas 1 SD</div>
+            </div>
+
+            <!-- Stats Summary -->
+            <div class="profile-stats">
+                <div class="ps-item"><div class="ps-val" id="parentPsGames">0</div><div class="ps-lbl">Games</div></div>
+                <div class="ps-item"><div class="ps-val" id="parentPsAccuracy">0%</div><div class="ps-lbl">Akurasi</div></div>
+                <div class="ps-item"><div class="ps-val" id="parentPsStreak">0</div><div class="ps-lbl">Max Streak</div></div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="section-header">
+                <h3><i class="fas fa-history"></i> Aktivitas Terbaru</h3>
+            </div>
+            <div class="history-list" id="parentActivityList"></div>
+
+            <button class="join-class-btn" id="parentAddChildBtn" style="margin:16px auto;display:block">+ Tambah Anak</button>
+        </div>
+    </div>
+
+    <!-- ============ PARENT: PROFILE ============ -->
+    <div id="parentProfileScreen" class="screen">
+        <div class="app-container">
+            <div class="top-bar">
+                <h2 class="page-title"><i class="fas fa-user"></i> Profil</h2>
+            </div>
+
+            <div class="profile-hero glass">
+                <div class="ph-avatar" id="parentProfileAvatar">🧑</div>
+                <h3 class="ph-name" id="parentProfileName">Orang Tua</h3>
+            </div>
+
+            <div class="section-header" style="margin-top:20px">
+                <h3><i class="fas fa-child"></i> Anak Terhubung</h3>
+            </div>
+            <div class="settings-group glass" id="parentChildrenList"></div>
+
+            <button class="join-class-btn" id="parentProfileAddChildBtn" style="margin:16px auto;display:block">+ Tambah Anak</button>
+
+            <div class="settings-group glass" style="margin-top:20px">
+                <div class="setting-item danger" id="parentLogoutBtn">
+                    <div class="setting-info"><i class="fas fa-sign-out-alt"></i><span>Keluar</span></div>
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+            <div class="app-version">MathQuest v3.0 — Made with ❤️</div>
         </div>
     </div>
 
