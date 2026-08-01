@@ -1,8 +1,8 @@
 {
-  "name": "mathquest-backend",
+  "name": "beebox-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "MathQuest API backend (auth, game sessions, classes, analytics) shared by the student/parent app and the teacher back-office",
+  "description": "Bee Box API backend (auth, game sessions, classes, analytics) shared by the student/parent app and the teacher back-office",
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",

@@ -71,6 +71,8 @@ const defaults = () => ({
   totalQuestions: 0,
   unlocked: [1],
   fastestTime: 999,
+  lastPlayedDate: null,
+  playedToday: false,
   history: [],
   gp: {},
   achievements: {},
@@ -243,7 +245,7 @@ function drawParticles() {
     if(p.y < 0 || p.y > canvas.height) p.vy *= -1;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(0, 204, 255, ${p.alpha})`;
+    ctx.fillStyle = `rgba(140, 109, 31, ${p.alpha * 0.6})`;
     ctx.fill();
   });
   requestAnimationFrame(drawParticles);
@@ -275,12 +277,9 @@ async function renderHome() {
   await syncProfile();
 
   $('headerXP').textContent = S.xp;
-  $('heroLevel').textContent = S.level;
   $('heroStreak').textContent = S.streak;
-
-  // Calculate general accuracy
-  const acc = S.totalQuestions > 0 ? Math.round((S.correctAnswers / S.totalQuestions) * 100) : 0;
-  $('heroAccuracy').textContent = `${acc}%`;
+  $('menuAvatarEmoji').textContent = S.avatar;
+  $('inviteLinkCode').textContent = S.linkCode || '-';
 
   // Greeting name
   $('heroName').textContent = S.name;
@@ -295,7 +294,73 @@ async function renderHome() {
   // Grade badge
   $('heroGradeBadge').textContent = getGradeLabel(S.userGrade);
 
-  renderLevelMap('all');
+  renderNotifications();
+}
+
+// "Pemberitahuan" - real, computed items only (never fabricated placeholders):
+// an unfinished-level reminder, a daily-challenge reminder, and the most
+// recently unlocked achievement.
+function renderNotifications() {
+  const list = $('notificationList');
+  const dot = $('notifDot');
+  if(!list) return;
+  list.innerHTML = '';
+  const items = [];
+
+  const gp = S.gp[S.userGrade] || { done: 0 };
+  const doneCount = gp.done || 0;
+  if(doneCount < 5) {
+    const cfg = GRADE_CONFIG[S.userGrade];
+    const nextSub = Math.min(doneCount + 1, 5);
+    items.push({
+      type: 'continue', icon: cfg.icon,
+      title: `Lanjutkan ${cfg.name}`,
+      subtitle: `Sub-level ${nextSub} dari 5 • ${5 - doneCount} tersisa`,
+      cta: 'Lanjut', action: () => { AudioFX.click(); quickPlay(); }
+    });
+  }
+
+  if(!S.playedToday) {
+    items.push({
+      type: 'daily', icon: '🔥',
+      title: 'Tantangan Harian',
+      subtitle: 'Belum dikerjain hari ini!',
+      cta: 'Mulai', action: () => { AudioFX.click(); dailyChallenge(); }
+    });
+  }
+
+  const unlockedAch = ACHIEVEMENTS
+    .filter(a => S.achievements[a.id])
+    .map(a => ({ a, date: new Date(S.achievements[a.id]) }))
+    .filter(x => !isNaN(x.date))
+    .sort((x, y) => y.date - x.date)[0];
+  if(unlockedAch) {
+    items.push({
+      type: 'achievement', icon: unlockedAch.a.i,
+      title: `Prestasi: ${unlockedAch.a.n}`,
+      subtitle: unlockedAch.a.d,
+      cta: null
+    });
+  }
+
+  if(dot) dot.style.display = items.some(i => i.type !== 'achievement') ? 'block' : 'none';
+
+  if(items.length === 0) {
+    list.innerHTML = '<div class="empty-msg"><i class="fas fa-check-circle"></i>Gak ada pemberitahuan baru 🎉</div>';
+    return;
+  }
+
+  items.forEach(it => {
+    const card = document.createElement('div');
+    card.className = 'action-card';
+    card.innerHTML = `
+      <div class="ac-icon ${it.type}">${it.icon}</div>
+      <div class="ac-info"><h4>${it.title}</h4><p>${it.subtitle}</p></div>
+      ${it.cta ? `<button class="ac-btn">${it.cta}</button>` : ''}
+    `;
+    if(it.cta) card.querySelector('.ac-btn').addEventListener('click', it.action);
+    list.appendChild(card);
+  });
 }
 
 function renderLevelMap(filter) {
@@ -789,8 +854,8 @@ function renderBigChart(timeframe) {
   }
 
   const gradient = canvasEl.getContext('2d').createLinearGradient(0, 0, 0, 160);
-  gradient.addColorStop(0, 'rgba(0, 255, 136, 0.3)');
-  gradient.addColorStop(1, 'rgba(0, 255, 136, 0)');
+  gradient.addColorStop(0, 'rgba(255, 179, 0, 0.3)');
+  gradient.addColorStop(1, 'rgba(255, 179, 0, 0)');
 
   mainChartObj = new Chart(canvasEl, {
     type: 'line',
@@ -799,12 +864,12 @@ function renderBigChart(timeframe) {
       datasets: [{
         label: 'Skor',
         data: scores,
-        borderColor: '#00ff88',
+        borderColor: '#FFB300',
         borderWidth: 2,
         fill: true,
         backgroundColor: gradient,
         tension: 0.4,
-        pointBackgroundColor: '#00ff88',
+        pointBackgroundColor: '#FFB300',
         pointRadius: scores.length > 20 ? 0 : 3
       }]
     },
@@ -813,8 +878,8 @@ function renderBigChart(timeframe) {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { display: false }, ticks: { color: '#6b6590', font: { size: 9 } } },
-        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b6590', font: { size: 9 } } }
+        x: { grid: { display: false }, ticks: { color: '#7A6F55', font: { size: 9 } } },
+        y: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { color: '#7A6F55', font: { size: 9 } } }
       }
     }
   });
@@ -838,14 +903,14 @@ function renderOverviewSubtab() {
         labels: ['Benar', 'Salah'],
         datasets: [{
           data: correct === 0 && incorrect === 0 ? [1, 0] : [correct, incorrect],
-          backgroundColor: ['#00ff88', '#ff2d78'],
+          backgroundColor: ['#FFB300', '#E0245E'],
           borderWidth: 0
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { color: '#fff', font: { size: 10 } } } },
+        plugins: { legend: { position: 'bottom', labels: { color: '#2B2410', font: { size: 10 } } } },
         cutout: '70%'
       }
     });
@@ -1350,14 +1415,57 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Quick play & daily challenge triggers
-  const qpBtn = safeEl('quickPlayBtn');
-  if(qpBtn) qpBtn.addEventListener('click', () => { AudioFX.click(); quickPlay(); });
-
-  const dcBtn = safeEl('dailyChallengeBtn');
-  if(dcBtn) dcBtn.addEventListener('click', () => { AudioFX.click(); dailyChallenge(); });
   // navPlayBtn is handled by the delegated #bottomNav listener above (it gets
   // recreated whenever setNavForRole() swaps the nav's innerHTML).
+
+  // === HOME MENU GRID ===
+  const tileBelajar = safeEl('tileBelajar');
+  if(tileBelajar) {
+    tileBelajar.addEventListener('click', () => {
+      AudioFX.click();
+      document.querySelectorAll('.tab-btn').forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
+      renderLevelMap('all');
+      showScreen('learnScreen');
+    });
+  }
+
+  const tileUjian = safeEl('tileUjian');
+  if(tileUjian) tileUjian.addEventListener('click', async () => { AudioFX.click(); showScreen('examScreen'); await renderExams(); });
+
+  const tileProgress = safeEl('tileProgress');
+  if(tileProgress) tileProgress.addEventListener('click', async () => { AudioFX.click(); showScreen('analyticsScreen'); await renderStats(); });
+
+  const tileProfil = safeEl('tileProfil');
+  if(tileProfil) tileProfil.addEventListener('click', async () => { AudioFX.click(); showScreen('profileScreen'); await renderProfile(); });
+
+  const tileQuickPlay = safeEl('tileQuickPlay');
+  if(tileQuickPlay) tileQuickPlay.addEventListener('click', () => { AudioFX.click(); quickPlay(); });
+
+  const tileDaily = safeEl('tileDaily');
+  if(tileDaily) tileDaily.addEventListener('click', () => { AudioFX.click(); dailyChallenge(); });
+
+  const tileAch = safeEl('tileAch');
+  if(tileAch) {
+    tileAch.addEventListener('click', async () => {
+      AudioFX.click();
+      showScreen('profileScreen');
+      await renderProfile();
+      safeEl('achGrid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  const tileJoinClass = safeEl('tileJoinClass');
+  if(tileJoinClass) {
+    tileJoinClass.addEventListener('click', async () => {
+      AudioFX.click();
+      showScreen('profileScreen');
+      await renderProfile();
+      safeEl('joinClassCode')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  const notifBellBtn = safeEl('notifBellBtn');
+  if(notifBellBtn) notifBellBtn.addEventListener('click', () => { AudioFX.click(); safeEl('notifSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 
   // Result screen navigation actions
   const retryBtn = safeEl('rRetry');

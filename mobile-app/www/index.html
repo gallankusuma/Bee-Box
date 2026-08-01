@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MathQuest — Platform Edukasi Matematika Interaktif</title>
+    <title>Bee Box — Platform Edukasi Matematika Interaktif</title>
     <meta name="description" content="Platform edukasi matematika interaktif bertingkat dari SD kelas 1 sampai SMP kelas 3 dengan monitoring & analytics.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
@@ -25,10 +25,10 @@
     <div id="splashScreen" class="screen active">
         <div class="splash-content">
             <div class="splash-icon-wrap">
-                <div class="splash-icon">🧠</div>
+                <div class="splash-icon">🐝</div>
                 <div class="splash-ring"></div>
             </div>
-            <h1>Math<span>Quest</span></h1>
+            <h1>Bee<span>Box</span></h1>
             <p class="splash-tagline">Level Up Your Math Skills!</p>
             <div class="splash-loader">
                 <div class="splash-bar"><div class="splash-bar-fill"></div></div>
@@ -40,8 +40,8 @@
     <div id="onboardingScreen" class="screen">
         <div class="ob-container">
             <div class="ob-header">
-                <div class="ob-logo">🧠</div>
-                <h1>Selamat Datang di <span class="neon-text">MathQuest</span></h1>
+                <div class="ob-logo">🐝</div>
+                <h1>Selamat Datang di <span class="neon-text">Bee Box</span></h1>
                 <p class="ob-desc">Isi data diri kamu biar soalnya pas sama kelasmu!</p>
             </div>
 
@@ -143,8 +143,8 @@
     <div id="loginScreen" class="screen">
         <div class="ob-container">
             <div class="ob-header">
-                <div class="ob-logo">🧠</div>
-                <h1>Masuk ke <span class="neon-text">MathQuest</span></h1>
+                <div class="ob-logo">🐝</div>
+                <h1>Masuk ke <span class="neon-text">Bee Box</span></h1>
                 <p class="ob-desc">Lanjutin petualangan matematika kamu!</p>
             </div>
             <div class="ob-step active" data-step="1">
@@ -170,7 +170,7 @@
             <div class="ob-header">
                 <div class="ob-logo">👨‍👩‍👧</div>
                 <h1>Daftar sebagai <span class="neon-text">Orang Tua</span></h1>
-                <p class="ob-desc">Pantau progres belajar anak kamu di MathQuest.</p>
+                <p class="ob-desc">Pantau progres belajar anak kamu di Bee Box.</p>
             </div>
             <div class="ob-step active" data-step="1">
                 <div class="ob-field">
@@ -216,8 +216,8 @@
         <div class="app-container">
             <div class="top-bar">
                 <div class="top-bar-left">
-                    <div class="mini-logo">🧠</div>
-                    <span class="mini-logo-text">Math<span>Quest</span></span>
+                    <div class="mini-logo">🐝</div>
+                    <span class="mini-logo-text">Bee<span>Box</span></span>
                 </div>
             </div>
 
@@ -296,68 +296,81 @@
                     <i class="fas fa-chevron-right"></i>
                 </div>
             </div>
-            <div class="app-version">MathQuest v3.0 — Made with ❤️</div>
+            <div class="app-version">Bee Box v3.0 — Made with ❤️</div>
         </div>
     </div>
 
-    <!-- ============ TAB 1: HOME ============ -->
+    <!-- ============ TAB 1: HOME (menu grid) ============ -->
     <div id="homeScreen" class="screen">
         <div class="app-container">
-            <div class="top-bar">
-                <div class="top-bar-left">
-                    <div class="mini-logo">🧠</div>
-                    <span class="mini-logo-text">Math<span>Quest</span></span>
-                </div>
-                <div class="top-bar-right">
-                    <div class="xp-pill"><i class="fas fa-bolt"></i> <span id="headerXP">0</span> XP</div>
-                </div>
-            </div>
-
-            <!-- Hero Card -->
-            <div class="hero-card">
-                <div class="hero-bg-pattern"></div>
-                <div class="hero-content">
-                    <div class="hero-greeting">
-                        <span class="hero-wave">👋</span>
-                        <div>
-                            <p class="hero-hello" id="heroHello">Halo!</p>
-                            <h2 class="hero-name" id="heroName">Petualang</h2>
-                        </div>
+            <!-- Profile header banner -->
+            <div class="menu-header">
+                <div class="menu-header-top">
+                    <div class="menu-header-greet">
+                        <p class="hero-hello" id="heroHello">Halo!</p>
+                        <h2 class="hero-name" id="heroName">Petualang</h2>
                     </div>
-                    <div class="hero-stats">
-                        <div class="hero-stat">
-                            <div class="hero-stat-val" id="heroLevel">1</div>
-                            <div class="hero-stat-lbl">Level</div>
-                        </div>
-                        <div class="hero-divider"></div>
-                        <div class="hero-stat">
-                            <div class="hero-stat-val" id="heroStreak">0</div>
-                            <div class="hero-stat-lbl">🔥 Streak</div>
-                        </div>
-                        <div class="hero-divider"></div>
-                        <div class="hero-stat">
-                            <div class="hero-stat-val" id="heroAccuracy">0%</div>
-                            <div class="hero-stat-lbl">Akurasi</div>
-                        </div>
+                    <div class="menu-header-actions">
+                        <button class="menu-icon-btn" id="notifBellBtn" title="Pemberitahuan">
+                            <i class="fas fa-bell"></i>
+                            <span class="menu-badge-dot" id="notifDot" style="display:none"></span>
+                        </button>
+                        <button class="menu-avatar-btn" id="editProfileBtn" title="Edit Profil">
+                            <span id="menuAvatarEmoji">🧒</span>
+                        </button>
                     </div>
                 </div>
-                <button class="hero-edit-btn" id="editProfileBtn" title="Edit Profil"><i class="fas fa-pen"></i></button>
-                <div class="hero-grade-badge" id="heroGradeBadge">Kelas 1 SD</div>
+                <div class="menu-stats-row">
+                    <div class="menu-stat"><i class="fas fa-bolt"></i> <span id="headerXP">0</span> XP</div>
+                    <div class="menu-stat">🔥 <span id="heroStreak">0</span> Streak</div>
+                    <div class="menu-stat" id="heroGradeBadge">Kelas 1 SD</div>
+                </div>
             </div>
 
-            <!-- Quick Actions -->
-            <div class="quick-actions">
-                <button class="quick-action-btn qa-play" id="quickPlayBtn">
-                    <div class="qa-icon"><i class="fas fa-play"></i></div>
-                    <span>Main Cepat</span>
-                </button>
-                <button class="quick-action-btn qa-daily" id="dailyChallengeBtn">
-                    <div class="qa-icon"><i class="fas fa-calendar-star"></i></div>
-                    <span>Tantangan Harian</span>
-                </button>
+            <!-- Primary menu grid -->
+            <div class="menu-grid-primary">
+                <button class="menu-tile" id="tileBelajar"><div class="menu-tile-icon">🗺️</div><span>Belajar</span></button>
+                <button class="menu-tile" id="tileUjian"><div class="menu-tile-icon">📝</div><span>Ujian</span></button>
+                <button class="menu-tile" id="tileProgress"><div class="menu-tile-icon">📊</div><span>Progress</span></button>
+                <button class="menu-tile" id="tileProfil"><div class="menu-tile-icon">👤</div><span>Profil</span></button>
             </div>
 
-            <!-- Level Map -->
+            <!-- Secondary menu grid -->
+            <div class="menu-grid-secondary">
+                <button class="menu-tile-sm" id="tileQuickPlay"><div class="menu-tile-sm-icon">▶️</div><span>Main Cepat</span></button>
+                <button class="menu-tile-sm" id="tileDaily"><div class="menu-tile-sm-icon">🔥</div><span>Tantangan Harian</span></button>
+                <button class="menu-tile-sm" id="tileAch"><div class="menu-tile-sm-icon">🏆</div><span>Prestasi</span></button>
+                <button class="menu-tile-sm" id="tileJoinClass"><div class="menu-tile-sm-icon">🚪</div><span>Gabung Kelas</span></button>
+            </div>
+
+            <!-- Pemberitahuan -->
+            <div class="section-header" id="notifSection" style="margin-top:20px">
+                <h3><i class="fas fa-bell"></i> Pemberitahuan</h3>
+            </div>
+            <div class="history-list" id="notificationList"></div>
+
+            <!-- Undangan -->
+            <div class="section-header" style="margin-top:20px">
+                <h3><i class="fas fa-user-plus"></i> Undangan</h3>
+            </div>
+            <div class="invite-card">
+                <div class="invite-icon">🎁</div>
+                <div class="invite-info">
+                    <h4>Ajak Orang Tua Pantau Progress Kamu</h4>
+                    <p>Kasih kode ini ke orang tua kamu buat lihat perkembangan belajar kamu.</p>
+                    <span class="link-code-pill" id="inviteLinkCode">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ LEARN (level map, opened from the Belajar tile) ============ -->
+    <div id="learnScreen" class="screen">
+        <div class="app-container">
+            <div class="screen-header">
+                <button class="back-btn" data-back="homeScreen"><i class="fas fa-arrow-left"></i></button>
+                <h2>Belajar</h2>
+            </div>
             <div class="section-header">
                 <h3><i class="fas fa-map"></i> Peta Petualangan</h3>
                 <div class="section-tabs">
@@ -584,7 +597,7 @@
                     <i class="fas fa-chevron-right"></i>
                 </div>
             </div>
-            <div class="app-version">MathQuest v3.0 — Made with ❤️</div>
+            <div class="app-version">Bee Box v3.0 — Made with ❤️</div>
         </div>
     </div>
 

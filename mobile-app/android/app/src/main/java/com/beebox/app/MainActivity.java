@@ -1,4 +1,4 @@
-package com.mathquest.app;
+package com.beebox.app;
 
 import com.getcapacitor.BridgeActivity;
 

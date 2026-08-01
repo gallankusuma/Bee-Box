@@ -29,4 +29,4 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`MathQuest backend listening on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Bee Box backend listening on http://localhost:${PORT}`));

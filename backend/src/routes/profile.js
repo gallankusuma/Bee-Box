@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { GRADE_CONFIG, getExamDuration } = require('../../../shared/gradeConfig');
+const { dateKey } = require('../utils/dailyStreak');
 
 const router = express.Router();
 
@@ -46,8 +47,10 @@ router.get('/me', requireAuth, requireRole('STUDENT'), async (req, res) => {
     linkCode: profile.linkCode,
     sound: profile.sound,
     vibrate: profile.vibrate,
+    lastPlayedDate: profile.lastPlayedDate,
+    playedToday: profile.lastPlayedDate === dateKey(new Date()),
     gp,
-    achievements: Object.fromEntries(profile.achievements.map(a => [a.achievementId, true])),
+    achievements: Object.fromEntries(profile.achievements.map(a => [a.achievementId, a.unlockedAt])),
     exams: profile.exams,
     history: profile.sessions.map(s => ({
       date: s.finishedAt,
