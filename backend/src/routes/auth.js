@@ -1,12 +1,37 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const { z } = require('zod');
 const prisma = require('../db');
-const { isValidRole } = require('../utils/roles');
+const { ROLES } = require('../utils/roles');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { requireAuth } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
 const { generateCode } = require('../utils/codes');
 const { getDefaultSchoolId } = require('../utils/school');
 const { getActiveRoleAssignment } = require('../utils/roleAssignment');
+const { authLimiter } = require('../middleware/rateLimit');
+
+const registerSchema = z.object({
+  username: z.string().trim().min(3).max(30).optional(),
+  email: z.string().trim().email().max(120).optional(),
+  password: z.string().min(6).max(100),
+  role: z.enum(ROLES),
+  name: z.string().trim().min(1).max(60),
+  avatar: z.string().max(10).optional(),
+  birthdate: z.string().max(20).optional(),
+  grade: z.coerce.number().int().min(1).max(9).optional()
+}).refine(data => data.username || data.email, { message: 'username or email is required', path: ['username'] })
+  .refine(data => data.role !== 'STUDENT' || data.grade !== undefined, { message: 'grade (1-9) is required for STUDENT registration', path: ['grade'] });
+
+const loginSchema = z.object({
+  username: z.string().trim().min(1).max(30).optional(),
+  email: z.string().trim().email().max(120).optional(),
+  password: z.string().min(1).max(100)
+}).refine(data => data.username || data.email, { message: 'username/email and password are required', path: ['username'] });
+
+const refreshSchema = z.object({
+  refreshToken: z.string().min(1)
+});
 
 async function uniqueLinkCode() {
   for(let i = 0; i < 5; i++) {
@@ -26,20 +51,8 @@ function publicUser(user, roleAssignment) {
 // POST /api/auth/register
 // STUDENT registration also creates the StudentProfile (grade/birthdate),
 // folding the old client-side onboarding wizard into one call.
-router.post('/register', async (req, res) => {
-  const { username, email, password, role, name, avatar, birthdate, grade } = req.body || {};
-
-  if(!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  if(!username && !email) return res.status(400).json({ error: 'username or email is required' });
-  if(!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
-  if(!isValidRole(role)) return res.status(400).json({ error: 'role must be STUDENT, PARENT, or TEACHER' });
-
-  if(role === 'STUDENT') {
-    const gradeNum = parseInt(grade, 10);
-    if(!Number.isInteger(gradeNum) || gradeNum < 1 || gradeNum > 9) {
-      return res.status(400).json({ error: 'grade (1-9) is required for STUDENT registration' });
-    }
-  }
+router.post('/register', authLimiter, validateBody(registerSchema), async (req, res) => {
+  const { username, email, password, role, name, avatar, birthdate, grade } = req.body;
 
   const existing = await prisma.user.findFirst({
     where: { OR: [username ? { username } : undefined, email ? { email } : undefined].filter(Boolean) }
@@ -51,7 +64,7 @@ router.post('/register', async (req, res) => {
   const schoolId = await getDefaultSchoolId();
 
   const { user, roleAssignment } = await prisma.$transaction(async (tx) => {
-    const person = await tx.person.create({ data: { fullName: name.trim() } });
+    const person = await tx.person.create({ data: { fullName: name } });
 
     const user = await tx.user.create({
       data: {
@@ -59,14 +72,14 @@ router.post('/register', async (req, res) => {
         username: username || null,
         email: email || null,
         passwordHash,
-        name: name.trim(),
+        name,
         avatar: avatar || '🧒',
         ...(role === 'STUDENT' ? {
           studentProfile: {
             create: {
               birthdate: birthdate || null,
-              grade: parseInt(grade, 10),
-              unlockedGrades: JSON.stringify(Array.from({ length: parseInt(grade, 10) }, (_, i) => i + 1)),
+              grade,
+              unlockedGrades: JSON.stringify(Array.from({ length: grade }, (_, i) => i + 1)),
               linkCode
             }
           }
@@ -86,9 +99,8 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
-  const { username, email, password } = req.body || {};
-  if(!password || (!username && !email)) return res.status(400).json({ error: 'username/email and password are required' });
+router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) => {
+  const { username, email, password } = req.body;
 
   const user = await prisma.user.findFirst({
     where: username ? { username } : { email },
@@ -108,9 +120,8 @@ router.post('/login', async (req, res) => {
 });
 
 // POST /api/auth/refresh
-router.post('/refresh', async (req, res) => {
-  const { refreshToken } = req.body || {};
-  if(!refreshToken) return res.status(400).json({ error: 'refreshToken is required' });
+router.post('/refresh', authLimiter, validateBody(refreshSchema), async (req, res) => {
+  const { refreshToken } = req.body;
 
   let payload;
   try {

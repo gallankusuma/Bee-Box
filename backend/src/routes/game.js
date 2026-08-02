@@ -1,10 +1,24 @@
 const express = require('express');
+const { z } = require('zod');
 const prisma = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
 const { nextDailyStreak } = require('../utils/dailyStreak');
 const { QuestionEngine, GRADE_CONFIG, ACHIEVEMENTS, getTimeLimit, getExamDuration } = require('../../../shared/gradeConfig');
 
 const router = express.Router();
+
+const startGameSchema = z.object({
+  grade: z.coerce.number().int().refine(g => !!GRADE_CONFIG[g], { message: 'Invalid grade' }),
+  subLevel: z.coerce.number().int().min(1).max(5),
+  isExam: z.boolean().optional().default(false),
+  questionCount: z.coerce.number().int().min(1).max(30).optional().default(10)
+});
+
+const answerSchema = z.object({
+  questionId: z.string().min(1),
+  answer: z.union([z.string(), z.number()]).nullable().optional()
+});
 
 async function getStudentProfileOr404(userId, res) {
   const profile = await prisma.studentProfile.findUnique({ where: { userId } });
@@ -24,17 +38,11 @@ function publicQuestion(sq) {
 }
 
 // POST /api/game/start - server generates the questions and keeps the answer keys.
-router.post('/start', requireAuth, requireRole('STUDENT'), async (req, res) => {
+router.post('/start', requireAuth, requireRole('STUDENT'), validateBody(startGameSchema), async (req, res) => {
   const profile = await getStudentProfileOr404(req.auth.userId, res);
   if(!profile) return;
 
-  const grade = parseInt(req.body?.grade, 10);
-  const subLevel = parseInt(req.body?.subLevel, 10);
-  const isExam = !!req.body?.isExam;
-  const questionCount = Math.min(30, Math.max(1, parseInt(req.body?.questionCount, 10) || 10));
-
-  if(!GRADE_CONFIG[grade]) return res.status(400).json({ error: 'Invalid grade' });
-  if(!Number.isInteger(subLevel) || subLevel < 1 || subLevel > 5) return res.status(400).json({ error: 'Invalid subLevel' });
+  const { grade, subLevel, isExam, questionCount } = req.body;
 
   if(!isExam) {
     const unlockedGrades = JSON.parse(profile.unlockedGrades || '[1]');
@@ -77,12 +85,12 @@ router.post('/start', requireAuth, requireRole('STUDENT'), async (req, res) => {
 
 // POST /api/game/:sessionId/answer - checks the submitted answer server-side;
 // the client never receives the answer key up front.
-router.post('/:sessionId/answer', requireAuth, requireRole('STUDENT'), async (req, res) => {
+router.post('/:sessionId/answer', requireAuth, requireRole('STUDENT'), validateBody(answerSchema), async (req, res) => {
   const profile = await getStudentProfileOr404(req.auth.userId, res);
   if(!profile) return;
 
   const { sessionId } = req.params;
-  const { questionId, answer } = req.body || {};
+  const { questionId, answer } = req.body;
 
   const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
   if(!session || session.studentId !== profile.id) return res.status(404).json({ error: 'Session not found' });

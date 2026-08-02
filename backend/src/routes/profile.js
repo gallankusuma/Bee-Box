@@ -1,10 +1,21 @@
 const express = require('express');
+const { z } = require('zod');
 const prisma = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
 const { GRADE_CONFIG, getExamDuration } = require('../../../shared/gradeConfig');
 const { dateKey } = require('../utils/dailyStreak');
 
 const router = express.Router();
+
+const patchProfileSchema = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  avatar: z.string().min(1).max(10).optional(),
+  sound: z.boolean().optional(),
+  vibrate: z.boolean().optional(),
+  birthdate: z.string().max(20).optional(),
+  grade: z.coerce.number().int().refine(g => !!GRADE_CONFIG[g], { message: 'Invalid grade' }).optional()
+});
 
 // GET /api/profile/me - shaped close to the old localStorage `S` object so
 // the client migration in a later phase is a straightforward remap, not a rewrite.
@@ -70,29 +81,27 @@ router.get('/me', requireAuth, requireRole('STUDENT'), async (req, res) => {
 // PATCH /api/profile/me - settings + profile-modal edits (name, avatar, sound,
 // vibrate, birthdate, grade). Changing grade re-runs the unlock merge server-side,
 // same rule as the old client's setupGradeUnlocks().
-router.patch('/me', requireAuth, requireRole('STUDENT'), async (req, res) => {
+router.patch('/me', requireAuth, requireRole('STUDENT'), validateBody(patchProfileSchema), async (req, res) => {
   const profile = await prisma.studentProfile.findUnique({ where: { userId: req.auth.userId } });
   if(!profile) return res.status(404).json({ error: 'Student profile not found' });
 
-  const { name, avatar, sound, vibrate, birthdate, grade } = req.body || {};
+  const { name, avatar, sound, vibrate, birthdate, grade } = req.body;
   const userData = {};
-  if(typeof name === 'string' && name.trim()) userData.name = name.trim();
-  if(typeof avatar === 'string' && avatar) userData.avatar = avatar;
+  if(name !== undefined) userData.name = name;
+  if(avatar !== undefined) userData.avatar = avatar;
   if(Object.keys(userData).length) {
     await prisma.user.update({ where: { id: req.auth.userId }, data: userData });
   }
 
   const profileData = {};
-  if(typeof sound === 'boolean') profileData.sound = sound;
-  if(typeof vibrate === 'boolean') profileData.vibrate = vibrate;
-  if(typeof birthdate === 'string') profileData.birthdate = birthdate;
+  if(sound !== undefined) profileData.sound = sound;
+  if(vibrate !== undefined) profileData.vibrate = vibrate;
+  if(birthdate !== undefined) profileData.birthdate = birthdate;
 
   if(grade !== undefined) {
-    const gradeNum = parseInt(grade, 10);
-    if(!GRADE_CONFIG[gradeNum]) return res.status(400).json({ error: 'Invalid grade' });
-    profileData.grade = gradeNum;
+    profileData.grade = grade;
     const unlocked = new Set(JSON.parse(profile.unlockedGrades || '[1]'));
-    for(let i = 1; i <= gradeNum; i++) unlocked.add(i);
+    for(let i = 1; i <= grade; i++) unlocked.add(i);
     profileData.unlockedGrades = JSON.stringify([...unlocked].sort((a, b) => a - b));
   }
 

@@ -1,15 +1,29 @@
 const express = require('express');
+const { z } = require('zod');
 const prisma = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
 const { studentSummary } = require('../utils/studentSummary');
+const { codeLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
+const claimSchema = z.object({
+  linkCode: z.string().trim().min(1).max(20)
+});
+
 // POST /api/parent-links/claim - a parent links their account to a student
 // using the linkCode shown in that student's app (Profile screen).
-router.post('/claim', requireAuth, requireRole('PARENT'), async (req, res) => {
-  const { linkCode } = req.body || {};
-  if(!linkCode) return res.status(400).json({ error: 'linkCode is required' });
+//
+// Deliberately NOT scoped by school (unlike class-join, see routes/classes.js):
+// GuardianStudentRelationship has no schoolId column at all - families can
+// legitimately span schools (siblings at different campuses), and claiming
+// requires the student's own secret linkCode (already rate-limited via
+// codeLimiter), which their legitimate parent already has. That's not a
+// directory-enumeration surface across a tenant boundary the way guessing a
+// class join code is. See BEE_BOX_ROADMAP.md Phase 4 "Tenant isolation".
+router.post('/claim', requireAuth, requireRole('PARENT'), codeLimiter, validateBody(claimSchema), async (req, res) => {
+  const { linkCode } = req.body;
 
   const student = await prisma.studentProfile.findUnique({ where: { linkCode: linkCode.toUpperCase() }, include: { user: true } });
   if(!student) return res.status(404).json({ error: 'No student found for that code' });
