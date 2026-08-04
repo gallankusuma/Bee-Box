@@ -1,10 +1,21 @@
+// Escapes text before it's interpolated into an innerHTML template — a
+// linked account's name/avatar (student <-> parent) is untrusted, since it
+// was user-supplied at registration/profile-edit time on a different account.
+// Duplicated from shared/escapeHtml.js (kept inline, not loaded via <script
+// src>) because Capacitor's webDir:"www" only packages mobile-app/www/ into
+// the native Android build - a reference outside this folder would 404
+// there. Keep this in sync with shared/escapeHtml.js if either changes.
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // === API CLIENT ===
-// Browser dev: localhost works as-is. Android emulator: 10.0.2.2 is the
-// special alias for the host machine's localhost. Physical device / iOS
-// simulator on a different network: replace with your machine's LAN IP.
+// Which host to hit is per-deployment config (window.BEE_BOX_API_HOSTS,
+// config.js, loaded before this script); which branch to pick is a runtime
+// platform check that stays here. Review.md P2 item 10.
 const API_BASE = (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
-  ? 'http://10.0.2.2:4000/api'
-  : 'http://localhost:4000/api';
+  ? window.BEE_BOX_API_HOSTS.native
+  : window.BEE_BOX_API_HOSTS.web;
 const TOKEN_KEY = 'mq_access_token';
 const REFRESH_KEY = 'mq_refresh_token';
 
@@ -34,12 +45,17 @@ const Api = {
     }
 
     const data = await res.json().catch(() => ({}));
-    if(!res.ok) throw new Error(data.error || `Request gagal (${res.status})`);
+    if(!res.ok) {
+      const err = new Error(data.error || `Request gagal (${res.status})`);
+      if(data.expired) err.expired = true;
+      throw err;
+    }
     return data;
   },
   get(path, opts) { return this.request('GET', path, undefined, opts); },
   post(path, body, opts) { return this.request('POST', path, body, opts); },
   patch(path, body, opts) { return this.request('PATCH', path, body, opts); },
+  delete(path, opts) { return this.request('DELETE', path, undefined, opts); },
 
   async tryRefresh() {
     const refreshToken = localStorage.getItem(REFRESH_KEY);
@@ -619,6 +635,9 @@ async function submitAnswer(ans, btnEl) {
     result = await Api.post(`/game/${G.sessionId}/answer`, { questionId: q.id, answer: ans });
   } catch(e) {
     console.error('Gagal mengirim jawaban:', e);
+    // Server-side exam timeout beat the client's own timer (clock skew/lag) -
+    // stop asking questions the server will just keep rejecting.
+    if(e.expired) { endGame(); return; }
     result = { isCorrect: false, scoreEarned: 0, correctAnswer: '?' };
   }
 
@@ -1104,6 +1123,9 @@ async function renderProfile() {
 
   const linkCodeEl = $('studentLinkCode');
   if(linkCodeEl) linkCodeEl.textContent = S.linkCode || '-';
+  const linkCodeExpiryEl = $('studentLinkCodeExpiry');
+  if(linkCodeExpiryEl) linkCodeExpiryEl.textContent = S.linkCodeExpiresAt ? new Date(S.linkCodeExpiresAt).toLocaleDateString('id-ID') : '-';
+  loadParentRequests();
 
   // Achievements grid
   const grid = $('achGrid');
@@ -1128,6 +1150,54 @@ async function renderProfile() {
     $('achUnlocked').textContent = unlockedCount;
     $('achTotal').textContent = ACHIEVEMENTS.length;
   }
+}
+
+// === STUDENT: incoming parent-link requests ===
+// A parent claiming this student's code lands as PENDING - only the student
+// can confirm "yes, that's really my parent" (Team_Review.md P0 item 3).
+async function loadParentRequests() {
+  const group = $('parentRequestsGroup');
+  const list = $('parentRequestsList');
+  if(!group || !list) return;
+  try {
+    const data = await Api.get('/parent-links/pending');
+    renderParentRequests(data.pending);
+  } catch(e) {
+    group.style.display = 'none';
+  }
+}
+
+function renderParentRequests(pending) {
+  const group = $('parentRequestsGroup');
+  const list = $('parentRequestsList');
+  if(!group || !list) return;
+  group.style.display = pending.length > 0 ? 'block' : 'none';
+  list.innerHTML = '';
+  pending.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'parent-request-item';
+    row.innerHTML = `
+      <span>${escapeHtml(p.parentAvatar)} ${escapeHtml(p.parentName)}</span>
+      <div class="parent-request-actions">
+        <button class="parent-request-approve">Setujui</button>
+        <button class="parent-request-reject">Tolak</button>
+      </div>
+    `;
+    row.querySelector('.parent-request-approve').addEventListener('click', async () => {
+      try {
+        await Api.post(`/parent-links/${p.id}/approve`, {});
+        await loadParentRequests();
+        showToast('✅', 'Disetujui', `${p.parentName} sekarang bisa memantau progres kamu`);
+      } catch(err) { showToast('⚠️', 'Gagal', err.message); }
+    });
+    row.querySelector('.parent-request-reject').addEventListener('click', async () => {
+      try {
+        await Api.post(`/parent-links/${p.id}/reject`, {});
+        await loadParentRequests();
+      } catch(err) { showToast('⚠️', 'Gagal', err.message); }
+    });
+    list.appendChild(row);
+  });
 }
 
 // === UTILS ===
@@ -1158,7 +1228,7 @@ function renderParentChildChips() {
   PARENT.children.forEach(c => {
     const chip = document.createElement('div');
     chip.className = 'child-chip' + (c.studentId === PARENT.activeStudentId ? ' active' : '');
-    chip.innerHTML = `<span class="chip-avatar">${c.avatar}</span><span>${c.name}</span>`;
+    chip.innerHTML = `<span class="chip-avatar">${escapeHtml(c.avatar)}</span><span>${escapeHtml(c.name)}</span>`;
     chip.addEventListener('click', async () => {
       if(c.studentId === PARENT.activeStudentId) return;
       await syncParentChildDetail(c.studentId);
@@ -1218,9 +1288,23 @@ function renderParentProfile() {
     const row = document.createElement('div');
     row.className = 'setting-item';
     row.innerHTML = `
-      <div class="setting-info"><i class="fas fa-child"></i><span>${c.avatar} ${c.name}</span></div>
+      <div class="setting-info"><i class="fas fa-child"></i><span>${escapeHtml(c.avatar)} ${escapeHtml(c.name)}</span></div>
       <span class="link-code-pill">${getGradeLabel(c.grade)}</span>
+      <button class="unlink-child-btn" title="Putuskan hubungan" data-relationship-id="${c.relationshipId}"><i class="fas fa-unlink"></i></button>
     `;
+    row.querySelector('.unlink-child-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = confirm(`Putuskan hubungan dengan ${c.name}? Kamu tidak akan bisa melihat progresnya lagi.`);
+      if(!ok) return;
+      try {
+        await Api.delete(`/parent-links/${c.relationshipId}`);
+        await syncParentChildren();
+        renderParentProfile();
+        if(PARENT.children.length === 0) showScreen('parentClaimScreen');
+      } catch(err) {
+        showToast('⚠️', 'Gagal', err.message);
+      }
+    });
     list.appendChild(row);
   });
 }
@@ -1764,9 +1848,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       parentClaimBtn.disabled = true;
       try {
-        await Api.post('/parent-links/claim', { linkCode: code });
+        // The relationship starts PENDING - the student has to approve it in
+        // their own app before it shows up here, so stay on this screen and
+        // explain that instead of navigating to a home that has nothing yet.
+        const data = await Api.post('/parent-links/claim', { linkCode: code });
         safeEl('parentClaimCode').value = '';
-        await bootParentMode();
+        msgEl.textContent = `Menunggu persetujuan dari ${data.studentName}. Kamu bisa memantau progresnya setelah disetujui.`;
+        msgEl.style.display = 'block';
+        await syncParentChildren();
+        safeEl('parentClaimGotoHome').style.display = PARENT.children.length > 0 ? 'block' : 'none';
       } catch(err) {
         msgEl.textContent = err.message;
         msgEl.classList.add('error');
@@ -1848,6 +1938,26 @@ document.addEventListener('DOMContentLoaded', () => {
         msgEl.style.display = 'block';
       } finally {
         joinClassBtn.disabled = false;
+      }
+    });
+  }
+
+  // Regenerate the parent-link code (e.g. shared it by mistake, or it expired)
+  const regenerateLinkCodeBtn = safeEl('regenerateLinkCodeBtn');
+  if(regenerateLinkCodeBtn) {
+    regenerateLinkCodeBtn.addEventListener('click', async () => {
+      regenerateLinkCodeBtn.disabled = true;
+      try {
+        const data = await Api.post('/parent-links/regenerate-code', {});
+        S.linkCode = data.linkCode;
+        S.linkCodeExpiresAt = data.linkCodeExpiresAt;
+        $('studentLinkCode').textContent = data.linkCode;
+        $('studentLinkCodeExpiry').textContent = new Date(data.linkCodeExpiresAt).toLocaleDateString('id-ID');
+        showToast('🔑', 'Kode Baru', 'Kode lama sudah tidak berlaku');
+      } catch(err) {
+        showToast('⚠️', 'Gagal', err.message);
+      } finally {
+        regenerateLinkCodeBtn.disabled = false;
       }
     });
   }

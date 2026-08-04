@@ -31,6 +31,61 @@ model School {
 
   roleAssignments RoleAssignment[]
   classes         Class[]
+  teacherInvites  TeacherInvite[]
+}
+
+// A pending/accepted invite for a school admin to bring a teacher on board.
+// Public /auth/register no longer accepts role=TEACHER (see routes/auth.js) -
+// this is the only way a TEACHER RoleAssignment gets created post-launch.
+model TeacherInvite {
+  id              String    @id @default(cuid())
+  name            String
+  email           String?
+  token           String    @unique
+  schoolId        String
+  school          School    @relation(fields: [schoolId], references: [id])
+  invitedByUserId String
+  status          String    @default("PENDING") // PENDING | ACCEPTED | REVOKED
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+// Minimal audit trail, scoped for now to teacher-invite and parent-link
+// events (the two P0 items that explicitly require one). Deliberately not
+// yet the full login/class-CRUD/permission-change audit log described in
+// BEE_BOX_ROADMAP.md Phase 4's "Audit log" backlog item - this model is the
+// foundation that item will extend, not a competing implementation of it.
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  schoolId    String?
+  ipAddress   String?
+  userAgent   String?
+  metadata    String? // JSON-encoded
+  createdAt   DateTime @default(now())
+}
+
+// One row per issued refresh token. Its id doubles as the refresh JWT's
+// `jti` claim - /auth/refresh looks it up to check revokedAt/expiresAt
+// before trusting an otherwise-valid signature, which is what makes
+// logout/logout-all actually revoke access instead of just forgetting a
+// local token. Review.md P1 item 7.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // Role now lives on RoleAssignment (one user can eventually hold several);
@@ -49,6 +104,7 @@ model User {
   createdAt    DateTime  @default(now())
 
   roleAssignments RoleAssignment[]
+  sessions        Session[]
   studentProfile  StudentProfile?
   teacherClasses  Class[]                     @relation("TeacherClasses")
   guardianLinks   GuardianStudentRelationship[] @relation("ParentSide")
@@ -95,6 +151,7 @@ model StudentProfile {
   sound          Boolean @default(true)
   vibrate        Boolean @default(true)
   linkCode       String  @unique // shown to the student, used by a parent to link their account
+  linkCodeExpiresAt DateTime? // code is single-use in practice: claiming it regenerates a new one (see routes/parentLinks.js)
 
   gradeProgress    GradeProgress[]
   sessions         GameSession[]
@@ -135,6 +192,7 @@ model GameSession {
   xpEarned   Int?
   createdAt  DateTime  @default(now())
   lastActivityAt DateTime @default(now()) // bumped on each answer; used to time the NEXT answer server-side
+  expiresAt  DateTime? // set for exam sessions only (createdAt + getExamDuration(grade)); enforced server-side in /answer and /finish
   finishedAt DateTime?
 
   questions SessionQuestion[]
@@ -207,8 +265,9 @@ model ClassEnrollment {
 }
 
 // Parent gets read-only visibility into a student's progress via a link code.
-// Claiming a code is inherently self-verifying, so verificationStatus defaults
-// to VERIFIED - there's no separate approval step today.
+// A claim starts PENDING and only becomes VERIFIED once the student approves
+// it in their own app (routes/parentLinks.js approve/reject) - the student is
+// the one person who can confirm "yes, this is actually my parent."
 model GuardianStudentRelationship {
   id                     String         @id @default(cuid())
   parentId               String
@@ -219,9 +278,10 @@ model GuardianStudentRelationship {
   legalGuardian          Boolean        @default(true)
   pickupPermission       Boolean        @default(false)
   emergencyContact       Boolean        @default(false)
-  verificationStatus     String         @default("VERIFIED")
+  verificationStatus     String         @default("PENDING") // PENDING | VERIFIED
   communicationPriority  Int            @default(1)
   linkedAt               DateTime       @default(now())
+  respondedAt            DateTime?
 
   @@unique([parentId, studentId])
 }

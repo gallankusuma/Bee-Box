@@ -140,4 +140,11 @@ function getExamDuration(grade) {
   return grade <= 3 ? 60 : grade <= 6 ? 90 : 120;
 }
 
-module.exports = { QuestionEngine, GRADE_CONFIG, ACHIEVEMENTS, getTimeLimit, getExamDuration };
+// Fixed session sizes - the server decides this, never the client (a client
+// requesting fewer questions could otherwise farm XP faster). Same value for
+// both modes today; kept as two names since they're conceptually separate
+// knobs a future difficulty pass might split apart. Team_Review.md P0 item 4.
+const NORMAL_QUESTION_COUNT = 10;
+const EXAM_QUESTION_COUNT = 10;
+
+module.exports = { QuestionEngine, GRADE_CONFIG, ACHIEVEMENTS, getTimeLimit, getExamDuration, NORMAL_QUESTION_COUNT, EXAM_QUESTION_COUNT };

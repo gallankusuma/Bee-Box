@@ -644,6 +644,16 @@ body {
 .join-class-hint { font-size: 0.72rem; color: var(--text3); padding: 0 14px 14px; }
 .link-code-pill { font-family: var(--mono); font-weight: 700; color: var(--neon); background: rgba(232, 163, 23,0.1); padding: 4px 10px; border-radius: 8px; letter-spacing: 1px; font-size: 0.85rem; }
 
+.unlink-child-btn { border: none; background: none; color: var(--text3); cursor: pointer; font-size: 0.9rem; padding: 4px; }
+.unlink-child-btn:hover { color: var(--neonPk); }
+
+.parent-request-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; gap: 10px; border-bottom: 1px solid var(--gb); }
+.parent-request-item:last-child { border: none; }
+.parent-request-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.parent-request-actions button { border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+.parent-request-approve { background: var(--gradB); color: #06111a; }
+.parent-request-reject { background: rgba(232,60,90,0.12); color: var(--neonPk); }
+
 .child-chip-row { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 14px; }
 .child-chip { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 6px 14px 6px 8px; border-radius: 999px; background: var(--glass); border: 1.5px solid var(--gb); cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--text2); transition: 0.2s; }
 .child-chip .chip-avatar { font-size: 1.1rem; }

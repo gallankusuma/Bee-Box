@@ -588,7 +588,17 @@
                     <div class="setting-info"><i class="fas fa-user-friends"></i><span>Kode buat Orang Tua</span></div>
                     <span class="link-code-pill" id="studentLinkCode">-</span>
                 </div>
-                <p class="join-class-hint">Kasih kode ini ke orang tua kamu biar mereka bisa lihat progres kamu.</p>
+                <p class="join-class-hint">Kasih kode ini ke orang tua kamu biar mereka bisa lihat progres kamu. Berlaku sampai <span id="studentLinkCodeExpiry">-</span>.</p>
+                <div class="join-class-row">
+                    <button class="join-class-btn" id="regenerateLinkCodeBtn" style="margin:0 14px 14px">Buat Kode Baru</button>
+                </div>
+            </div>
+
+            <div class="settings-group glass" id="parentRequestsGroup" style="display:none">
+                <div class="setting-item">
+                    <div class="setting-info"><i class="fas fa-bell"></i><span>Permintaan Orang Tua</span></div>
+                </div>
+                <div id="parentRequestsList"></div>
             </div>
 
             <div class="settings-group glass">
@@ -733,6 +743,7 @@
     </div>
 
     <script src="questions.js?v=6"></script>
+    <script src="config.js"></script>
     <script src="game.js?v=6"></script>
 </body>
 </html>

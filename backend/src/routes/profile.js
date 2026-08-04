@@ -5,6 +5,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { validateBody } = require('../middleware/validate');
 const { GRADE_CONFIG, getExamDuration } = require('../../../shared/gradeConfig');
 const { dateKey } = require('../utils/dailyStreak');
+const { logAction } = require('../utils/auditLog');
 
 const router = express.Router();
 
@@ -56,6 +57,7 @@ router.get('/me', requireAuth, requireRole('STUDENT'), async (req, res) => {
     unlocked: JSON.parse(profile.unlockedGrades || '[1]'),
     fastestTime: profile.fastestTime,
     linkCode: profile.linkCode,
+    linkCodeExpiresAt: profile.linkCodeExpiresAt,
     sound: profile.sound,
     vibrate: profile.vibrate,
     lastPlayedDate: profile.lastPlayedDate,
@@ -107,6 +109,13 @@ router.patch('/me', requireAuth, requireRole('STUDENT'), validateBody(patchProfi
 
   if(Object.keys(profileData).length) {
     await prisma.studentProfile.update({ where: { id: profile.id }, data: profileData });
+  }
+
+  if(Object.keys(userData).length || Object.keys(profileData).length) {
+    await logAction({
+      actorUserId: req.auth.userId, action: 'PROFILE_UPDATED', entityType: 'StudentProfile',
+      entityId: profile.id, schoolId: req.auth.schoolId, metadata: { ...userData, ...profileData }, req
+    });
   }
 
   res.json({ ok: true });

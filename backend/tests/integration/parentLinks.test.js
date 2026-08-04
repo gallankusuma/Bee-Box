@@ -1,4 +1,5 @@
 const request = require('supertest');
+const prisma = require('../../src/db');
 const { app, createStudent, createParent, createTeacher } = require('../helpers/users');
 const { moveToNewSchool } = require('../helpers/schools');
 
@@ -22,11 +23,32 @@ describe('POST /api/parent-links/claim', () => {
       .set('Authorization', `Bearer ${parent.accessToken}`)
       .send({ linkCode: student.studentProfile.linkCode });
 
+    // A successful claim regenerates the student's code (single-use by
+    // design - see routes/parentLinks.js), so fetch the fresh one before
+    // trying to link the same already-linked pair again.
+    const me = await request(app).get('/api/profile/me').set('Authorization', `Bearer ${student.accessToken}`);
     const res = await request(app)
       .post('/api/parent-links/claim')
       .set('Authorization', `Bearer ${parent.accessToken}`)
-      .send({ linkCode: student.studentProfile.linkCode });
+      .send({ linkCode: me.body.linkCode });
     expect(res.status).toBe(409);
+  });
+
+  it('regenerates the link code on a successful claim so it cannot be reused', async () => {
+    const student = await createStudent();
+    const parent = await createParent();
+    const originalCode = student.studentProfile.linkCode;
+    await request(app)
+      .post('/api/parent-links/claim')
+      .set('Authorization', `Bearer ${parent.accessToken}`)
+      .send({ linkCode: originalCode });
+
+    const otherParent = await createParent();
+    const res = await request(app)
+      .post('/api/parent-links/claim')
+      .set('Authorization', `Bearer ${otherParent.accessToken}`)
+      .send({ linkCode: originalCode });
+    expect(res.status).toBe(404);
   });
 
   it('rejects an unknown link code', async () => {
@@ -64,14 +86,43 @@ describe('POST /api/parent-links/claim', () => {
   });
 });
 
+// Claims a student's code for a parent and approves it as the student, so
+// tests that need a VERIFIED relationship don't each re-derive this flow.
+async function claimAndApprove(student, parent) {
+  await request(app)
+    .post('/api/parent-links/claim')
+    .set('Authorization', `Bearer ${parent.accessToken}`)
+    .send({ linkCode: student.studentProfile.linkCode });
+  const pending = await request(app)
+    .get('/api/parent-links/pending')
+    .set('Authorization', `Bearer ${student.accessToken}`);
+  const relationshipId = pending.body.pending[0].id;
+  await request(app)
+    .post(`/api/parent-links/${relationshipId}/approve`)
+    .set('Authorization', `Bearer ${student.accessToken}`);
+  return relationshipId;
+}
+
 describe('GET /api/parent-links/children', () => {
-  it('lists linked children with their progress summary', async () => {
+  it('does not list a still-PENDING claim', async () => {
     const student = await createStudent();
     const parent = await createParent();
     await request(app)
       .post('/api/parent-links/claim')
       .set('Authorization', `Bearer ${parent.accessToken}`)
       .send({ linkCode: student.studentProfile.linkCode });
+
+    const res = await request(app)
+      .get('/api/parent-links/children')
+      .set('Authorization', `Bearer ${parent.accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.children).toEqual([]);
+  });
+
+  it('lists a child once the student approves the claim', async () => {
+    const student = await createStudent();
+    const parent = await createParent();
+    await claimAndApprove(student, parent);
 
     const res = await request(app)
       .get('/api/parent-links/children')
@@ -88,5 +139,81 @@ describe('GET /api/parent-links/children', () => {
       .set('Authorization', `Bearer ${parent.accessToken}`);
     expect(res.status).toBe(200);
     expect(res.body.children).toEqual([]);
+  });
+});
+
+describe('parent-link approval flow', () => {
+  it('a student can reject a pending claim, removing the relationship', async () => {
+    const student = await createStudent();
+    const parent = await createParent();
+    await request(app)
+      .post('/api/parent-links/claim')
+      .set('Authorization', `Bearer ${parent.accessToken}`)
+      .send({ linkCode: student.studentProfile.linkCode });
+
+    const pending = await request(app)
+      .get('/api/parent-links/pending')
+      .set('Authorization', `Bearer ${student.accessToken}`);
+    expect(pending.body.pending).toHaveLength(1);
+
+    const reject = await request(app)
+      .post(`/api/parent-links/${pending.body.pending[0].id}/reject`)
+      .set('Authorization', `Bearer ${student.accessToken}`);
+    expect(reject.status).toBe(200);
+
+    const children = await request(app)
+      .get('/api/parent-links/children')
+      .set('Authorization', `Bearer ${parent.accessToken}`);
+    expect(children.body.children).toEqual([]);
+  });
+
+  it('rejects a stranger approving someone else\'s pending claim', async () => {
+    const student = await createStudent();
+    const otherStudent = await createStudent();
+    const parent = await createParent();
+    await request(app)
+      .post('/api/parent-links/claim')
+      .set('Authorization', `Bearer ${parent.accessToken}`)
+      .send({ linkCode: student.studentProfile.linkCode });
+
+    const pending = await request(app)
+      .get('/api/parent-links/pending')
+      .set('Authorization', `Bearer ${student.accessToken}`);
+
+    const res = await request(app)
+      .post(`/api/parent-links/${pending.body.pending[0].id}/approve`)
+      .set('Authorization', `Bearer ${otherStudent.accessToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('either side can unlink a VERIFIED relationship', async () => {
+    const student = await createStudent();
+    const parent = await createParent();
+    const relationshipId = await claimAndApprove(student, parent);
+
+    const res = await request(app)
+      .delete(`/api/parent-links/${relationshipId}`)
+      .set('Authorization', `Bearer ${student.accessToken}`);
+    expect(res.status).toBe(200);
+
+    const children = await request(app)
+      .get('/api/parent-links/children')
+      .set('Authorization', `Bearer ${parent.accessToken}`);
+    expect(children.body.children).toEqual([]);
+  });
+
+  it('rejects an expired link code', async () => {
+    const student = await createStudent();
+    const parent = await createParent();
+    await prisma.studentProfile.update({
+      where: { id: student.studentProfile.id },
+      data: { linkCodeExpiresAt: new Date(Date.now() - 1000) }
+    });
+
+    const res = await request(app)
+      .post('/api/parent-links/claim')
+      .set('Authorization', `Bearer ${parent.accessToken}`)
+      .send({ linkCode: student.studentProfile.linkCode });
+    expect(res.status).toBe(410);
   });
 });

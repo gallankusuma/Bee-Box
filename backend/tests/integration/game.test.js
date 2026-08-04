@@ -41,6 +41,18 @@ describe('POST /api/game/start', () => {
       .send({ grade: 3, subLevel: 99 });
     expect(res.status).toBe(400);
   });
+
+  // Team_Review.md P0 item 4: questionCount must be server-derived, not
+  // client-controlled, or a client could request fewer questions to farm XP faster.
+  it('ignores a client-supplied questionCount', async () => {
+    const student = await createStudent({ grade: 3 });
+    const res = await request(app)
+      .post('/api/game/start')
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ grade: 3, subLevel: 1, questionCount: 1 });
+    expect(res.status).toBe(201);
+    expect(res.body.questions.length).toBe(10);
+  });
 });
 
 describe('answer -> finish flow', () => {
@@ -78,6 +90,52 @@ describe('answer -> finish flow', () => {
     expect(me.body.gp['3'].subs['1'].done).toBe(true);
   });
 
+  // Review.md P3 test checklist: duplicate-answer, checked sequentially (the
+  // existing concurrent-finish test below covers the race; this covers the
+  // simpler "just call it twice" case explicitly).
+  it('rejects answering the same question twice in a row', async () => {
+    const student = await createStudent({ grade: 3 });
+    const start = await request(app)
+      .post('/api/game/start')
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ grade: 3, subLevel: 1 });
+    const q = start.body.questions[0];
+    const stored = await prisma.sessionQuestion.findUnique({ where: { id: q.id } });
+
+    const first = await request(app)
+      .post(`/api/game/${start.body.sessionId}/answer`)
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ questionId: q.id, answer: stored.answerKey });
+    expect(first.status).toBe(200);
+
+    const second = await request(app)
+      .post(`/api/game/${start.body.sessionId}/answer`)
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ questionId: q.id, answer: stored.answerKey });
+    expect(second.status).toBe(409);
+  });
+
+  // Review.md P3 test checklist: duplicate-finish, checked sequentially.
+  it('rejects finishing the same session twice in a row', async () => {
+    const student = await createStudent({ grade: 3 });
+    const start = await request(app)
+      .post('/api/game/start')
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ grade: 3, subLevel: 1 });
+
+    const first = await request(app)
+      .post(`/api/game/${start.body.sessionId}/finish`)
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({});
+    expect(first.status).toBe(200);
+
+    const second = await request(app)
+      .post(`/api/game/${start.body.sessionId}/finish`)
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({});
+    expect(second.status).toBe(409);
+  });
+
   it('rejects answering a question that does not belong to the session', async () => {
     const student = await createStudent({ grade: 3 });
     const start = await request(app)
@@ -105,5 +163,62 @@ describe('answer -> finish flow', () => {
       .set('Authorization', `Bearer ${studentB.accessToken}`)
       .send({});
     expect(res.status).toBe(404);
+  });
+
+  // Team_Review.md P0 item 6: two concurrent /finish calls for the same
+  // session (double-tap, retry) must only credit XP once, not twice.
+  it('only credits XP once when /finish is called concurrently', async () => {
+    const student = await createStudent({ grade: 3 });
+    const start = await request(app)
+      .post('/api/game/start')
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ grade: 3, subLevel: 1 });
+    const sessionId = start.body.sessionId;
+
+    for(const q of start.body.questions) {
+      const stored = await prisma.sessionQuestion.findUnique({ where: { id: q.id } });
+      await request(app)
+        .post(`/api/game/${sessionId}/answer`)
+        .set('Authorization', `Bearer ${student.accessToken}`)
+        .send({ questionId: q.id, answer: stored.answerKey });
+    }
+
+    const [first, second] = await Promise.all([
+      request(app).post(`/api/game/${sessionId}/finish`).set('Authorization', `Bearer ${student.accessToken}`).send({}),
+      request(app).post(`/api/game/${sessionId}/finish`).set('Authorization', `Bearer ${student.accessToken}`).send({})
+    ]);
+
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    const winner = first.status === 200 ? first : second;
+    const me = await request(app).get('/api/profile/me').set('Authorization', `Bearer ${student.accessToken}`);
+    expect(me.body.xp).toBe(winner.body.xp);
+    expect(me.body.totalGames).toBe(1);
+  });
+});
+
+describe('exam timer enforcement', () => {
+  // Team_Review.md P0 item 5: a hard server-side deadline, not just a
+  // client-displayed countdown - simulate expiry directly since waiting out
+  // a real exam duration in a test would be slow and flaky.
+  it('rejects an answer submitted after the exam has expired', async () => {
+    const student = await createStudent({ grade: 3 });
+    const start = await request(app)
+      .post('/api/game/start')
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ grade: 3, subLevel: 1, isExam: true });
+    const sessionId = start.body.sessionId;
+
+    await prisma.gameSession.update({ where: { id: sessionId }, data: { expiresAt: new Date(Date.now() - 1000) } });
+
+    const q = start.body.questions[0];
+    const stored = await prisma.sessionQuestion.findUnique({ where: { id: q.id } });
+    const res = await request(app)
+      .post(`/api/game/${sessionId}/answer`)
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ questionId: q.id, answer: stored.answerKey });
+    expect(res.status).toBe(410);
+    expect(res.body.expired).toBe(true);
   });
 });

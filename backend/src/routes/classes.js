@@ -8,6 +8,7 @@ const { generateCode } = require('../utils/codes');
 const { studentSummary } = require('../utils/studentSummary');
 const { GRADE_CONFIG } = require('../../../shared/gradeConfig');
 const { codeLimiter } = require('../middleware/rateLimit');
+const { logAction } = require('../utils/auditLog');
 
 const router = express.Router();
 
@@ -42,6 +43,12 @@ router.post('/', requireAuth, requireRole('TEACHER'), validateBody(createClassSc
   const cls = await prisma.class.create({
     data: { teacherId: req.auth.userId, schoolId: req.auth.schoolId, name, grade, joinCode }
   });
+
+  await logAction({
+    actorUserId: req.auth.userId, action: 'CLASS_CREATED', entityType: 'Class',
+    entityId: cls.id, schoolId: req.auth.schoolId, metadata: { name, grade, joinCode }, req
+  });
+
   res.status(201).json(cls);
 });
 
@@ -103,14 +110,29 @@ router.patch('/:id', requireAuth, requireRole('TEACHER'), requireClassOwnership(
   if(grade !== undefined) data.grade = grade;
 
   const updated = await prisma.class.update({ where: { id: req.class.id }, data });
+
+  await logAction({
+    actorUserId: req.auth.userId, action: 'CLASS_UPDATED', entityType: 'Class',
+    entityId: updated.id, schoolId: req.auth.schoolId,
+    metadata: { before: { name: req.class.name, grade: req.class.grade }, after: data }, req
+  });
+
   res.json(updated);
 });
 
 // DELETE /api/classes/:id - removes the class and every enrollment in it
 // (students and their game data are untouched, only the roster link is gone).
 router.delete('/:id', requireAuth, requireRole('TEACHER'), requireClassOwnership(), async (req, res) => {
+  const enrollments = await prisma.classEnrollment.findMany({ where: { classId: req.class.id }, select: { studentId: true } });
   await prisma.classEnrollment.deleteMany({ where: { classId: req.class.id } });
   await prisma.class.delete({ where: { id: req.class.id } });
+
+  await logAction({
+    actorUserId: req.auth.userId, action: 'CLASS_DELETED', entityType: 'Class',
+    entityId: req.class.id, schoolId: req.auth.schoolId,
+    metadata: { name: req.class.name, studentIds: enrollments.map(e => e.studentId) }, req
+  });
+
   res.json({ ok: true });
 });
 
@@ -118,6 +140,13 @@ router.delete('/:id', requireAuth, requireRole('TEACHER'), requireClassOwnership
 // roster only; the student's account and game history are untouched.
 router.delete('/:id/students/:studentId', requireAuth, requireRole('TEACHER'), requireClassOwnership(), requireStudentEnrollment(), async (req, res) => {
   await prisma.classEnrollment.delete({ where: { id: req.enrollment.id } });
+
+  await logAction({
+    actorUserId: req.auth.userId, action: 'CLASS_STUDENT_REMOVED', entityType: 'ClassEnrollment',
+    entityId: req.enrollment.id, schoolId: req.auth.schoolId,
+    metadata: { classId: req.class.id, studentId: req.params.studentId }, req
+  });
+
   res.json({ ok: true });
 });
 
@@ -138,7 +167,13 @@ router.post('/join', requireAuth, requireRole('STUDENT'), codeLimiter, validateB
   });
   if(existing) return res.status(409).json({ error: 'Already enrolled in this class' });
 
-  await prisma.classEnrollment.create({ data: { classId: cls.id, studentId: profile.id } });
+  const enrollment = await prisma.classEnrollment.create({ data: { classId: cls.id, studentId: profile.id } });
+
+  await logAction({
+    actorUserId: req.auth.userId, action: 'CLASS_JOINED', entityType: 'ClassEnrollment',
+    entityId: enrollment.id, schoolId: req.auth.schoolId, metadata: { classId: cls.id, className: cls.name }, req
+  });
+
   res.status(201).json({ ok: true, className: cls.name });
 });
 

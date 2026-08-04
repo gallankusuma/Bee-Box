@@ -30,26 +30,26 @@
                 </div>
                 <div class="error-box" id="loginError" style="display:none"></div>
                 <button class="btn btn-primary btn-block" id="loginBtn">Masuk</button>
-                <p class="switch-link">Belum punya akun? <a href="#" id="gotoRegister">Daftar sebagai guru</a></p>
             </div>
 
+            <!-- Registration is invite-only: an ADMIN generates a link (?invite=TOKEN)
+                 and shares it with the new teacher. There is no public sign-up path. -->
             <div id="authRegisterPanel" class="auth-panel">
-                <h1>Daftar Akun Guru</h1>
-                <p class="auth-desc">Buat akun untuk mulai membuat kelas.</p>
-                <div class="field">
-                    <label for="regName">Nama Lengkap</label>
-                    <input type="text" id="regName" autocomplete="name">
+                <h1>Terima Undangan Guru</h1>
+                <p class="auth-desc" id="inviteDesc">Memeriksa undangan...</p>
+                <div class="error-box" id="inviteError" style="display:none"></div>
+                <div id="inviteForm" style="display:none">
+                    <div class="field">
+                        <label for="regUsername">Username</label>
+                        <input type="text" id="regUsername" autocomplete="username">
+                    </div>
+                    <div class="field">
+                        <label for="regPassword">Password</label>
+                        <input type="password" id="regPassword" autocomplete="new-password">
+                    </div>
+                    <div class="error-box" id="registerError" style="display:none"></div>
+                    <button class="btn btn-primary btn-block" id="registerBtn">Buat Akun</button>
                 </div>
-                <div class="field">
-                    <label for="regUsername">Username</label>
-                    <input type="text" id="regUsername" autocomplete="username">
-                </div>
-                <div class="field">
-                    <label for="regPassword">Password</label>
-                    <input type="password" id="regPassword" autocomplete="new-password">
-                </div>
-                <div class="error-box" id="registerError" style="display:none"></div>
-                <button class="btn btn-primary btn-block" id="registerBtn">Daftar</button>
                 <p class="switch-link">Sudah punya akun? <a href="#" id="gotoLogin">Masuk di sini</a></p>
             </div>
         </div>
@@ -148,6 +148,32 @@
                     <p>Belum ada riwayat permainan.</p>
                 </div>
             </section>
+
+            <!-- ============ ADMIN: invite a teacher ============ -->
+            <section id="adminView" class="view">
+                <div class="view-header">
+                    <h2>Undang Guru</h2>
+                </div>
+                <div class="auth-card" style="margin: 0;">
+                    <div class="field">
+                        <label for="inviteName">Nama Lengkap</label>
+                        <input type="text" id="inviteName" autocomplete="name">
+                    </div>
+                    <div class="field">
+                        <label for="inviteEmail">Email (opsional)</label>
+                        <input type="email" id="inviteEmail" autocomplete="email">
+                    </div>
+                    <div class="error-box" id="inviteCreateError" style="display:none"></div>
+                    <button class="btn btn-primary btn-block" id="createInviteBtn">Buat Undangan</button>
+                    <div id="inviteResultBox" style="display:none; margin-top: 16px;">
+                        <p class="auth-desc">Bagikan link ini ke calon guru (berlaku 7 hari):</p>
+                        <div class="field">
+                            <input type="text" id="inviteResultLink" readonly>
+                        </div>
+                        <button class="btn btn-ghost" id="copyInviteLinkBtn"><i class="fas fa-copy"></i> Salin Link</button>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -225,6 +251,8 @@
 
     <div class="toast" id="toast"></div>
 
+    <script src="escapeHtml.js"></script>
+    <script src="config.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

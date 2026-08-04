@@ -1,17 +1,18 @@
-// === API CLIENT ===
-const API_BASE = 'http://localhost:4000/api';
-const TOKEN_KEY = 'mqt_access_token';
-const REFRESH_KEY = 'mqt_refresh_token';
+// escapeHtml() now lives in shared/escapeHtml.js (loaded before this script)
+// so it's covered by backend/tests/unit/escapeHtml.test.js.
 
+// === API CLIENT ===
+// window.BEE_BOX_API_BASE comes from config.js, loaded before this script -
+// swap that file per deployment target instead of editing this one. Review.md P2 item 10.
+const API_BASE = window.BEE_BOX_API_BASE;
+const TOKEN_KEY = 'mqt_access_token';
+
+// The refresh token itself is never stored here anymore - it lives only in
+// the httpOnly cookie the server sets (see backend/src/utils/refreshCookie.js),
+// unreadable to any JS (ours or an XSS payload's). Review.md P2 item 12.
 function getAccessToken() { return localStorage.getItem(TOKEN_KEY); }
-function setTokens(access, refresh) {
-  localStorage.setItem(TOKEN_KEY, access);
-  localStorage.setItem(REFRESH_KEY, refresh);
-}
-function clearTokens() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_KEY);
-}
+function setAccessToken(access) { localStorage.setItem(TOKEN_KEY, access); }
+function clearAccessToken() { localStorage.removeItem(TOKEN_KEY); }
 
 const Api = {
   async request(method, path, body, opts = {}) {
@@ -20,7 +21,7 @@ const Api = {
     if(token && !opts.noAuth) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${API_BASE}${path}`, {
-      method, headers, body: body !== undefined ? JSON.stringify(body) : undefined
+      method, headers, credentials: 'include', body: body !== undefined ? JSON.stringify(body) : undefined
     });
 
     if(res.status === 401 && !opts.noAuth && !opts._retried) {
@@ -38,15 +39,13 @@ const Api = {
   delete(path, opts) { return this.request('DELETE', path, undefined, opts); },
 
   async tryRefresh() {
-    const refreshToken = localStorage.getItem(REFRESH_KEY);
-    if(!refreshToken) return false;
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: '{}'
       });
       if(!res.ok) return false;
       const data = await res.json();
-      setTokens(data.accessToken, data.refreshToken);
+      setAccessToken(data.accessToken);
       return true;
     } catch(e) { return false; }
   }
@@ -113,11 +112,11 @@ async function loadDashboard() {
     const card = document.createElement('div');
     card.className = 'class-card';
     card.innerHTML = `
-      <h4>${c.name}</h4>
+      <h4>${escapeHtml(c.name)}</h4>
       <span class="class-grade-tag">${GRADE_LABELS[c.grade] || 'Kelas ' + c.grade}</span>
       <div class="class-meta">
         <span><i class="fas fa-user-graduate"></i> ${c.studentCount} siswa</span>
-        <span class="code">${c.joinCode}</span>
+        <span class="code">${escapeHtml(c.joinCode)}</span>
       </div>
     `;
     card.addEventListener('click', () => openClass(c.id));
@@ -179,7 +178,7 @@ function renderRoster(classId, students) {
     const attention = s.totalGames > 0 && s.accuracy < NEEDS_ATTENTION_THRESHOLD;
     tr.innerHTML = `
       <td class="roster-rank">${i + 1}</td>
-      <td><div class="roster-name-cell"><span>${s.avatar}</span> ${s.name} ${attention ? '⚠️' : ''}</div></td>
+      <td><div class="roster-name-cell"><span>${escapeHtml(s.avatar)}</span> ${escapeHtml(s.name)} ${attention ? '⚠️' : ''}</div></td>
       <td>${GRADE_LABELS[s.grade] || s.grade}</td>
       <td>${s.level}</td>
       <td>${s.xp}</td>
@@ -187,7 +186,7 @@ function renderRoster(classId, students) {
       <td>${s.totalGames}</td>
       <td>${s.maxStreak}</td>
       <td>${s.lastPlayedDate || '-'}</td>
-      <td><button class="roster-remove-btn" title="Keluarkan dari kelas" data-student-id="${s.studentId}"><i class="fas fa-user-minus"></i></button></td>
+      <td><button class="roster-remove-btn" title="Keluarkan dari kelas" data-student-id="${escapeHtml(s.studentId)}"><i class="fas fa-user-minus"></i></button></td>
     `;
     tr.querySelector('.roster-name-cell').addEventListener('click', () => openStudent(classId, s.studentId));
     tr.querySelector('.roster-remove-btn').addEventListener('click', async e => {
@@ -246,20 +245,39 @@ async function openStudent(classId, studentId) {
 }
 
 // === BOOTSTRAP ===
+let CURRENT_ROLE = null;
+
+// Routes a logged-in session to the right view for its role - ADMIN only
+// ever sees the invite screen, TEACHER only ever sees the class dashboard.
+async function routeAfterAuth(role) {
+  CURRENT_ROLE = role;
+  $('authScreen').classList.remove('active');
+  $('appShell').style.display = 'block';
+  if(role === 'ADMIN') {
+    showView('adminView');
+  } else {
+    await loadDashboard();
+  }
+}
+
 async function tryRestoreSession() {
   if(!getAccessToken()) return false;
   try {
     const me = await Api.get('/auth/me');
     $('teacherName').textContent = me.user.name;
-    return true;
+    return me.user.role;
   } catch(e) {
-    clearTokens();
+    clearAccessToken();
     return false;
   }
 }
 
-function logout() {
-  clearTokens();
+// Revokes the session server-side (not just forgetting the local access
+// token) so the refresh cookie can't be used again after logout.
+async function logout() {
+  try { await Api.post('/auth/logout', {}, { noAuth: true }); } catch(e) { /* best-effort */ }
+  clearAccessToken();
+  CURRENT_ROLE = null;
   $('appShell').style.display = 'none';
   showView('dashboardView'); // reset for next login
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -268,20 +286,35 @@ function logout() {
   $('authRegisterPanel').classList.remove('active');
 }
 
+// Registration is invite-only (see routes/invites.js) - the accept-invite
+// panel only ever activates when the page is opened with ?invite=<token>,
+// there's no manual "go to register" path from the login screen.
+async function initInvitePanel() {
+  const token = new URLSearchParams(window.location.search).get('invite');
+  if(!token) return;
+
+  $('authLoginPanel').classList.remove('active');
+  $('authRegisterPanel').classList.add('active');
+
+  try {
+    const invite = await Api.get(`/invites/teacher/${encodeURIComponent(token)}`, { noAuth: true });
+    $('inviteDesc').textContent = `Kamu diundang sebagai "${invite.name}" untuk ${invite.schoolName}. Buat username dan password untuk mulai.`;
+    $('inviteForm').style.display = 'block';
+  } catch(e) {
+    $('inviteError').textContent = 'Undangan tidak ditemukan atau sudah kedaluwarsa.';
+    $('inviteError').style.display = 'block';
+    $('inviteDesc').style.display = 'none';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
-  const restored = await tryRestoreSession();
-  if(restored) {
-    $('authScreen').classList.remove('active');
-    $('appShell').style.display = 'block';
-    await loadDashboard();
+  const role = await tryRestoreSession();
+  if(role) {
+    await routeAfterAuth(role);
+  } else {
+    await initInvitePanel();
   }
 
-  // --- Auth panel switching ---
-  $('gotoRegister').addEventListener('click', e => {
-    e.preventDefault();
-    $('authLoginPanel').classList.remove('active');
-    $('authRegisterPanel').classList.add('active');
-  });
   $('gotoLogin').addEventListener('click', e => {
     e.preventDefault();
     $('authRegisterPanel').classList.remove('active');
@@ -299,42 +332,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('loginBtn').disabled = true;
     try {
       const data = await Api.post('/auth/login', { username, password }, { noAuth: true });
-      if(data.user.role !== 'TEACHER') throw new Error('Akun ini bukan akun guru');
-      setTokens(data.accessToken, data.refreshToken);
+      if(data.user.role !== 'TEACHER' && data.user.role !== 'ADMIN') throw new Error('Akun ini bukan akun guru atau admin');
+      setAccessToken(data.accessToken);
       $('teacherName').textContent = data.user.name;
-      $('authScreen').classList.remove('active');
-      $('appShell').style.display = 'block';
-      await loadDashboard();
+      await routeAfterAuth(data.user.role);
     } catch(e) {
-      errEl.textContent = e.message === 'Akun ini bukan akun guru' ? e.message : 'Username atau password salah';
+      errEl.textContent = e.message === 'Akun ini bukan akun guru atau admin' ? e.message : 'Username atau password salah';
       errEl.style.display = 'block';
     } finally {
       $('loginBtn').disabled = false;
     }
   });
 
-  // --- Register ---
+  // --- Accept invite (teacher account creation) ---
   $('registerBtn').addEventListener('click', async () => {
-    const name = $('regName').value.trim();
+    const token = new URLSearchParams(window.location.search).get('invite');
     const username = $('regUsername').value.trim();
     const password = $('regPassword').value;
     const errEl = $('registerError');
     errEl.style.display = 'none';
 
-    if(!name || !username || password.length < 6) {
-      errEl.textContent = 'Isi nama, username, dan password minimal 6 karakter';
+    if(!username || password.length < 6) {
+      errEl.textContent = 'Isi username, dan password minimal 6 karakter';
       errEl.style.display = 'block';
       return;
     }
 
     $('registerBtn').disabled = true;
     try {
-      const data = await Api.post('/auth/register', { name, username, password, role: 'TEACHER' }, { noAuth: true });
-      setTokens(data.accessToken, data.refreshToken);
+      const data = await Api.post(`/invites/teacher/${encodeURIComponent(token)}/accept`, { username, password }, { noAuth: true });
+      setAccessToken(data.accessToken);
       $('teacherName').textContent = data.user.name;
-      $('authScreen').classList.remove('active');
-      $('appShell').style.display = 'block';
-      await loadDashboard();
+      await routeAfterAuth(data.user.role);
     } catch(e) {
       errEl.textContent = e.message;
       errEl.style.display = 'block';
@@ -345,6 +374,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // --- Logout ---
   $('logoutBtn').addEventListener('click', logout);
+
+  // --- Admin: create teacher invite ---
+  $('createInviteBtn').addEventListener('click', async () => {
+    const name = $('inviteName').value.trim();
+    const email = $('inviteEmail').value.trim();
+    const errEl = $('inviteCreateError');
+    errEl.style.display = 'none';
+    if(!name) { errEl.textContent = 'Nama wajib diisi'; errEl.style.display = 'block'; return; }
+
+    $('createInviteBtn').disabled = true;
+    try {
+      const data = await Api.post('/invites/teacher', { name, email: email || undefined });
+      const link = `${window.location.origin}${window.location.pathname}?invite=${data.token}`;
+      $('inviteResultLink').value = link;
+      $('inviteResultBox').style.display = 'block';
+      $('inviteName').value = '';
+      $('inviteEmail').value = '';
+    } catch(e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+    } finally {
+      $('createInviteBtn').disabled = false;
+    }
+  });
+  $('copyInviteLinkBtn').addEventListener('click', async () => {
+    $('inviteResultLink').select();
+    await navigator.clipboard.writeText($('inviteResultLink').value);
+    showToast('Link disalin!');
+  });
 
   // --- Navigation ---
   $('backToDashboard').addEventListener('click', loadDashboard);
