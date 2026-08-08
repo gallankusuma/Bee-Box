@@ -68,4 +68,24 @@ describe('GET/POST /api/invites/teacher/:token', () => {
     const res = await request(app).get('/api/invites/teacher/not-a-real-token');
     expect(res.status).toBe(404);
   });
+
+  // Review.md implementation-review item 5: two concurrent accept requests
+  // for the same token could previously both read status:'PENDING' before
+  // either committed, creating two TEACHER accounts from one invite.
+  it('only lets one of two concurrent accept requests for the same token succeed', async () => {
+    const admin = await createAdmin();
+    const create = await request(app)
+      .post('/api/invites/teacher')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'Contested Teacher' });
+
+    const [resA, resB] = await Promise.all([
+      request(app).post(`/api/invites/teacher/${create.body.token}/accept`).send({ username: uniqueUsername('race_a'), password: 'testpass123' }),
+      request(app).post(`/api/invites/teacher/${create.body.token}/accept`).send({ username: uniqueUsername('race_b'), password: 'testpass123' })
+    ]);
+
+    const statuses = [resA.status, resB.status].sort();
+    expect(statuses[0]).toBe(201);
+    expect(statuses[1]).not.toBe(201);
+  });
 });

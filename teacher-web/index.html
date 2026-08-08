@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bee Box Guru — Back Office</title>
     <meta name="description" content="Dashboard guru untuk memantau progres siswa Bee Box per kelas.">
+    <!-- backend/src/server.js's helmet CSP only covers responses the API itself
+         serves - it does nothing for this static site. A <meta> CSP is the
+         portable fallback that works regardless of how this is hosted, but
+         it can't express every directive: frame-ancestors is silently
+         ignored in a meta tag (browsers only honor it as a real HTTP
+         header) - a real header from whatever static host this deploys to
+         is still needed for that specific protection. connect-src must be
+         kept in sync with config.js's API origin by hand. Review.md
+         implementation-review item 7. -->
+    <!-- style-src needs 'unsafe-inline' because the existing markup has
+         style="..." attributes throughout (a CSS-injection risk, not a
+         script-execution one - much lower severity, and reworking every
+         inline style into a class is out of scope here). script-src has no
+         such exception: there's no inline <script> or on*= handler
+         anywhere in this app, so it stays strict. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; script-src 'self'; img-src 'self' data:; connect-src 'self' http://localhost:4000; object-src 'none'; base-uri 'self'">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">

@@ -1892,20 +1892,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Settings: Grade change
-  const sGrade = safeEl('settingGrade');
-  if(sGrade) {
-    sGrade.addEventListener('change', async e => {
-      const grade = parseInt(e.target.value);
-      try {
-        await Api.patch('/profile/me', { grade });
-        await renderProfile();
-        showToast('🎓', 'KELAS DIUBAH', `Kamu sekarang di ${getGradeLabel(grade)}`);
-      } catch(err) {
-        alert('Gagal mengubah kelas: ' + err.message);
-      }
-    });
-  }
+  // Grade is display-only here (disabled in HTML) - it's no longer
+  // self-editable server-side, see routes/profile.js. Was a settings toggle
+  // that let a student instantly "unlock" every grade by just setting it high.
 
   // Settings: Birthdate change
   const sBirth = safeEl('settingBirthdate');

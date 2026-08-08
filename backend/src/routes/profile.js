@@ -9,13 +9,17 @@ const { logAction } = require('../utils/auditLog');
 
 const router = express.Router();
 
+// grade is deliberately NOT self-editable here (Review.md implementation-
+// review item 3) - the PATCH handler used to union unlockedGrades up to
+// whatever grade the student sent, so setting grade:9 instantly "unlocked"
+// every grade with zero actual progress. Grade is set once at registration;
+// correcting it is a school-admin action, not a settings toggle.
 const patchProfileSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   avatar: z.string().min(1).max(10).optional(),
   sound: z.boolean().optional(),
   vibrate: z.boolean().optional(),
-  birthdate: z.string().max(20).optional(),
-  grade: z.coerce.number().int().refine(g => !!GRADE_CONFIG[g], { message: 'Invalid grade' }).optional()
+  birthdate: z.string().max(20).optional()
 });
 
 // GET /api/profile/me - shaped close to the old localStorage `S` object so
@@ -80,14 +84,14 @@ router.get('/me', requireAuth, requireRole('STUDENT'), async (req, res) => {
   });
 });
 
-// PATCH /api/profile/me - settings + profile-modal edits (name, avatar, sound,
-// vibrate, birthdate, grade). Changing grade re-runs the unlock merge server-side,
-// same rule as the old client's setupGradeUnlocks().
+// PATCH /api/profile/me - settings + profile-modal edits (name, avatar,
+// sound, vibrate, birthdate). grade is intentionally not editable here - see
+// the schema comment above.
 router.patch('/me', requireAuth, requireRole('STUDENT'), validateBody(patchProfileSchema), async (req, res) => {
   const profile = await prisma.studentProfile.findUnique({ where: { userId: req.auth.userId } });
   if(!profile) return res.status(404).json({ error: 'Student profile not found' });
 
-  const { name, avatar, sound, vibrate, birthdate, grade } = req.body;
+  const { name, avatar, sound, vibrate, birthdate } = req.body;
   const userData = {};
   if(name !== undefined) userData.name = name;
   if(avatar !== undefined) userData.avatar = avatar;
@@ -99,13 +103,6 @@ router.patch('/me', requireAuth, requireRole('STUDENT'), validateBody(patchProfi
   if(sound !== undefined) profileData.sound = sound;
   if(vibrate !== undefined) profileData.vibrate = vibrate;
   if(birthdate !== undefined) profileData.birthdate = birthdate;
-
-  if(grade !== undefined) {
-    profileData.grade = grade;
-    const unlocked = new Set(JSON.parse(profile.unlockedGrades || '[1]'));
-    for(let i = 1; i <= grade; i++) unlocked.add(i);
-    profileData.unlockedGrades = JSON.stringify([...unlocked].sort((a, b) => a - b));
-  }
 
   if(Object.keys(profileData).length) {
     await prisma.studentProfile.update({ where: { id: profile.id }, data: profileData });

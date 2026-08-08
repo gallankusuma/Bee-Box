@@ -43,17 +43,31 @@ router.post('/claim', requireAuth, requireRole('PARENT'), codeLimiter, validateB
   });
   if(existing) return res.status(409).json({ error: 'Already linked to this student' });
 
-  const relationship = await prisma.$transaction(async (tx) => {
-    const relationship = await tx.guardianStudentRelationship.create({
-      data: { parentId: req.auth.userId, studentId: student.id }
+  // Review.md implementation-review item 5: two concurrent claims against
+  // the same still-valid code could both read it before either regenerated
+  // it, letting the "single-use" code link two different parents. The
+  // conditional update below only succeeds for whichever request still sees
+  // the exact code value it looked up with - a losing concurrent request
+  // gets count===0 and bails instead of creating a relationship.
+  const newCode = await uniqueLinkCode();
+  let relationship;
+  try {
+    relationship = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.studentProfile.updateMany({
+        where: { id: student.id, linkCode: student.linkCode },
+        data: { linkCode: newCode, linkCodeExpiresAt: linkCodeExpiry() }
+      });
+      if(claimed.count === 0) return null;
+      return tx.guardianStudentRelationship.create({ data: { parentId: req.auth.userId, studentId: student.id } });
     });
-    const newCode = await uniqueLinkCode();
-    await tx.studentProfile.update({
-      where: { id: student.id },
-      data: { linkCode: newCode, linkCodeExpiresAt: linkCodeExpiry() }
-    });
-    return relationship;
-  });
+  } catch(e) {
+    // P2002 = unique constraint (parentId_studentId) - a concurrent request
+    // for the SAME parent won the code race first; treat it the same as the
+    // pre-check above instead of a raw 500.
+    if(e.code === 'P2002') return res.status(409).json({ error: 'Already linked to this student' });
+    throw e;
+  }
+  if(!relationship) return res.status(410).json({ error: 'This code was just used - ask the student for a new one' });
 
   await logAction({
     actorUserId: req.auth.userId, action: 'PARENT_LINK_CLAIMED', entityType: 'GuardianStudentRelationship',

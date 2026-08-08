@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bee Box — Platform Edukasi Matematika Interaktif</title>
     <meta name="description" content="Platform edukasi matematika interaktif bertingkat dari SD kelas 1 sampai SMP kelas 3 dengan monitoring & analytics.">
+    <!-- backend/src/server.js's helmet CSP only covers responses the API
+         itself serves - it does nothing for this static site. A <meta> CSP
+         is the portable fallback that works regardless of hosting, but
+         can't express every directive: frame-ancestors is silently ignored
+         in a meta tag. connect-src covers both config.js hosts (emulator +
+         browser dev) and must be kept in sync with config.js by hand.
+         style-src needs 'unsafe-inline' for the existing style="..."
+         attributes throughout this app (a CSS-injection risk, not a
+         script-execution one) - script-src has no such exception, there's
+         no inline <script> or on*= handler anywhere here. Review.md
+         implementation-review item 7. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; script-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' http://localhost:4000 http://10.0.2.2:4000; object-src 'none'; base-uri 'self'">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -544,7 +556,7 @@
                 </div>
                 <div class="setting-item">
                     <div class="setting-info"><i class="fas fa-graduation-cap"></i><span>Kelas</span></div>
-                    <select id="settingGrade" class="setting-input setting-select">
+                    <select id="settingGrade" class="setting-input setting-select" disabled title="Hubungi guru/admin untuk mengubah kelas">
                         <option value="1">Kelas 1 SD</option>
                         <option value="2">Kelas 2 SD</option>
                         <option value="3">Kelas 3 SD</option>

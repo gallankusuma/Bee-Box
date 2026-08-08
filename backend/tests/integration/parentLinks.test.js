@@ -15,6 +15,25 @@ describe('POST /api/parent-links/claim', () => {
     expect(res.body.studentName).toBe(student.user.name);
   });
 
+  // Review.md implementation-review item 5: two different parents racing to
+  // claim the same still-valid code could previously both succeed before
+  // either regenerated it, defeating "single-use." Only one concurrent
+  // request should win.
+  it('only lets one of two concurrent claims on the same code succeed', async () => {
+    const student = await createStudent();
+    const parentA = await createParent();
+    const parentB = await createParent();
+
+    const [resA, resB] = await Promise.all([
+      request(app).post('/api/parent-links/claim').set('Authorization', `Bearer ${parentA.accessToken}`).send({ linkCode: student.studentProfile.linkCode }),
+      request(app).post('/api/parent-links/claim').set('Authorization', `Bearer ${parentB.accessToken}`).send({ linkCode: student.studentProfile.linkCode })
+    ]);
+
+    const statuses = [resA.status, resB.status].sort();
+    expect(statuses[0]).toBe(201);
+    expect(statuses[1]).not.toBe(201);
+  });
+
   it('rejects claiming the same student twice', async () => {
     const student = await createStudent();
     const parent = await createParent();

@@ -48,9 +48,23 @@ router.post('/start', requireAuth, requireRole('STUDENT'), validateBody(startGam
   const profile = await getStudentProfileOr404(req.auth.userId, res);
   if(!profile) return;
 
-  const { grade, subLevel, isExam } = req.body;
+  const { grade, isExam } = req.body;
+  // Exams are pinned to sub-level 1 server-side (they're not part of the
+  // sub-level progression at all) - the client always sends 1 anyway, this
+  // just stops a tampered value from doing anything.
+  const subLevel = isExam ? 1 : req.body.subLevel;
 
-  if(!isExam) {
+  if(isExam) {
+    // Review.md implementation-review item 1/2: isExam=true previously
+    // skipped grade/sub-level gating entirely, letting a client "unlock" any
+    // sub-level just by claiming exam mode. Exams get their OWN eligibility
+    // rule instead of no rule: the same grade+-1 band /profile/exams already
+    // exposes, not the full unlockedGrades progression.
+    const allowedExamGrades = [profile.grade - 1, profile.grade, profile.grade + 1].filter(g => g >= 1 && g <= 9);
+    if(!allowedExamGrades.includes(grade)) {
+      return res.status(403).json({ error: `Exam for grade ${grade} is not available for your grade` });
+    }
+  } else {
     const unlockedGrades = JSON.parse(profile.unlockedGrades || '[1]');
     if(!unlockedGrades.includes(grade)) return res.status(403).json({ error: `Grade ${grade} is not unlocked yet` });
 
@@ -229,8 +243,16 @@ router.post('/:sessionId/finish', requireAuth, requireRole('STUDENT'), async (re
     });
 
     // --- Non-exam: grade progress stars + next-grade unlock ---
+    // Review.md implementation-review item 4: finishing with unanswered
+    // questions must not grant "done" progression credit - previously a
+    // student could start+immediately finish (0 real answers) 5 times to
+    // instantly unlock the next grade. Exams are exempt from this (below):
+    // an exam that legitimately runs out of total time with a few questions
+    // still unanswered is a normal, expected outcome, not a bypass - exams
+    // don't unlock anything further, so there's nothing to gate there.
+    const allQuestionsAnswered = session.questions.every(q => q.answeredAt !== null);
     let gradeUnlocked = null;
-    if(!session.isExam) {
+    if(!session.isExam && allQuestionsAnswered) {
       const stars = accuracy === 100 ? 3 : accuracy >= 80 ? 2 : 1;
       const existing = await tx.gradeProgress.findUnique({
         where: { studentId_grade_subLevel: { studentId: profile.id, grade: session.grade, subLevel: session.subLevel } }
@@ -250,7 +272,7 @@ router.post('/:sessionId/finish', requireAuth, requireRole('STUDENT'), async (re
           gradeUnlocked = session.grade + 1;
         }
       }
-    } else {
+    } else if(session.isExam) {
       const existingAttempt = await tx.examAttempt.findFirst({ where: { studentId: profile.id, grade: session.grade } });
       if(existingAttempt) {
         await tx.examAttempt.update({

@@ -86,7 +86,19 @@ router.post('/teacher/:token/accept', authLimiter, validateBody(acceptInviteSche
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  const { user, roleAssignment } = await prisma.$transaction(async (tx) => {
+  // Review.md implementation-review item 5: two concurrent accept requests
+  // for the same token could both read status:'PENDING' before either
+  // committed, creating two TEACHER accounts from one invite. The
+  // conditional update claims the invite first - only one concurrent
+  // request can win it; a loser gets count===0 and bails before creating
+  // any account.
+  const result = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.teacherInvite.updateMany({
+      where: { id: invite.id, status: 'PENDING' },
+      data: { status: 'ACCEPTED', acceptedAt: new Date() }
+    });
+    if(claimed.count === 0) return null;
+
     const person = await tx.person.create({ data: { fullName: invite.name } });
     const user = await tx.user.create({
       data: {
@@ -99,9 +111,10 @@ router.post('/teacher/:token/accept', authLimiter, validateBody(acceptInviteSche
       }
     });
     const roleAssignment = await tx.roleAssignment.create({ data: { userId: user.id, role: 'TEACHER', schoolId: invite.schoolId } });
-    await tx.teacherInvite.update({ where: { id: invite.id }, data: { status: 'ACCEPTED', acceptedAt: new Date() } });
     return { user, roleAssignment };
   });
+  if(!result) return res.status(409).json({ error: 'Invite was already used' });
+  const { user, roleAssignment } = result;
 
   await logAction({
     actorUserId: user.id, action: 'TEACHER_INVITE_ACCEPTED', entityType: 'TeacherInvite',
