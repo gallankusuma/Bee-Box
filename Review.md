@@ -1,269 +1,146 @@
-Halo Tim Development,
+1. One-question XP farming masih mungkin
 
-Kami sudah melakukan review ulang terhadap repository Bee Box. Saat ini branch `main` masih berada pada commit:
+Tim sudah menutup bypass untuk unlock grade, tetapi /finish masih boleh dilakukan sebelum semua soal dijawab.
 
-`34e4f03045435813b462733d24ca125294a88911`
+Alurnya sekarang masih bisa:
 
-Belum terlihat commit baru setelah perbaikan terakhir. Mohon pastikan seluruh perubahan sudah di-push ke repository agar dapat dilakukan verifikasi ulang.
+Start 10 questions
+→ jawab 1 pertanyaan dengan benar
+→ finish
+→ dapat XP
+→ totalGames +1
+→ streak/achievement dapat berubah
+→ ulangi
 
-Berikut poin yang perlu ditindaklanjuti.
+Kodenya memang menghitung xpEarned lebih dulu, kemudian tetap update:
 
-## P0 — Security dan Pilot Blocker
+xp
+level
+totalGames + 1
+correctAnswers
+totalQuestions
+streak
 
-### 1. Stored XSS pada Teacher Web
+baru setelah itu allQuestionsAnswered dipakai untuk menentukan GradeProgress.
 
-Mohon audit seluruh penggunaan `innerHTML`, khususnya pada data yang berasal dari user atau database, seperti:
+Test baru bahkan secara eksplisit mengharapkan early finish:
 
-* nama siswa;
-* nama kelas;
-* avatar;
-* data profile;
-* data roster.
+expect(finish.status).toBe(200);
 
-Gunakan `textContent`, DOM API, atau sanitization yang aman.
+dan hanya memastikan sublevel tidak done.
 
-Acceptance criteria:
+Saya sarankan P0 ini belum ditutup.
 
-* Input HTML atau JavaScript pada nama siswa tidak boleh dijalankan pada dashboard guru.
-* Data user hanya tampil sebagai text.
-* Tambahkan automated test untuk payload XSS.
+Solusi paling bersih:
 
-### 2. Registrasi Role Teacher
+Regular game:
+semua soal belum dijawab
+→ /finish = 409 INCOMPLETE_SESSION
 
-Endpoint registrasi publik saat ini tidak boleh mengizinkan user menentukan role dengan hak khusus secara bebas.
+atau jika memang ingin tombol "Quit":
 
-Perbaikan yang diharapkan:
+/abandon
+→ status = abandoned
+→ XP = 0
+→ totalGames tidak bertambah
+→ streak tidak berubah
+→ achievement tidak diproses
+→ GradeProgress tidak berubah
+2. isExam masih client-controlled
 
-* Registrasi publik hanya untuk `STUDENT` dan `PARENT`.
-* Akun `TEACHER` dibuat atau diundang oleh administrator sekolah.
-* Tambahkan status akun seperti `PENDING`, `ACTIVE`, `SUSPENDED`, dan `REJECTED`.
-* Middleware harus memvalidasi status akun sebelum memberi akses.
+Sekarang jauh lebih aman karena:
 
-Acceptance criteria:
+exam hanya grade ±1;
+subLevel dipaksa server menjadi 1;
+jumlah soal server-side;
+timer server-side.
 
-* Request register dengan role `TEACHER` harus ditolak.
-* Akun suspended tidak dapat mengakses API walaupun token belum expired.
+Tetapi schema masih menerima:
 
-### 3. Parent–Student Relationship
+isExam: z.boolean().optional().default(false)
 
-Proses claim anak perlu diperketat karena saat ini hubungan dapat terbentuk menggunakan kode statis.
+Jadi secara arsitektur belum benar-benar server-authoritative exam.
 
-Perbaikan yang diharapkan:
+Idealnya:
 
-* Kode claim memiliki expiry.
-* Kode hanya dapat digunakan satu kali.
-* Relationship awal menggunakan status `PENDING`.
-* Tersedia proses approve atau verification.
-* Tersedia unlink atau revoke relationship.
-* Claim dicatat pada audit log.
+{
+  "examId": "ex_3"
+}
 
-Acceptance criteria:
+kemudian backend menentukan sendiri:
 
-* Kode expired ditolak.
-* Kode yang sudah digunakan tidak bisa dipakai kembali.
-* Parent yang sudah direvoke tidak dapat lagi melihat data anak.
+isExam
+grade
+questionCount
+duration
+eligibility
+attempt limit
+schedule
 
-### 4. Game dan Exam Harus Server-Authoritative
+Untuk MVP sekarang ini tidak separah sebelumnya, tetapi saya tetap tandai 🟡.
 
-Client tidak boleh menjadi sumber kebenaran untuk:
+Ada 2 temuan lama yang belum disentuh commit ini
+3. Refresh token browser masih keluar dalam JSON
 
-* `isExam`;
-* `questionCount`;
-* grade;
-* sublevel;
-* durasi;
-* reward XP;
-* bonus.
+Ini masih ada pada:
 
-Konfigurasi harus ditentukan dan divalidasi oleh backend.
+register;
+login;
+refresh;
+teacher invite acceptance.
 
-Acceptance criteria:
+Contohnya login masih mengembalikan:
 
-* User tidak dapat farming XP menggunakan satu pertanyaan.
-* User tidak dapat membuka grade atau sublevel terkunci.
-* User tidak dapat memulai exam tanpa konfigurasi yang valid.
-* Reward dihitung berdasarkan konfigurasi server.
+res.json({
+    ...,
+    accessToken,
+    refreshToken
+});
 
-### 5. Server-Side Exam Timer
+dan refresh:
 
-Timer tidak boleh hanya berjalan pada frontend.
+res.json({
+    accessToken: ...,
+    refreshToken: newRefreshToken
+});
 
-Backend perlu menyimpan:
+Padahal Teacher Web sudah memakai HTTP-only cookie. Kalau refresh token tetap dikembalikan ke JavaScript melalui response body, manfaat HTTP-only cookie berkurang drastis.
 
-* `startedAt`;
-* `expiresAt`;
-* `submittedAt`;
-* status attempt.
+Browser response sebaiknya tidak pernah menerima refresh token sebagai JSON.
 
-Acceptance criteria:
+Native mobile boleh menggunakan mekanisme berbeda.
 
-* Jawaban setelah `expiresAt` ditolak.
-* Refresh aplikasi tidak mengulang timer.
-* Waktu pada perangkat user tidak memengaruhi batas ujian.
-* Attempt otomatis ditutup setelah waktu habis.
+4. Suspended account masih dapat login/refresh
 
-### 6. Transaction dan Idempotency
+requireAuth sekarang sudah bagus dan akan memblok access token suspended user.
 
-Endpoint answer dan finish perlu dibuat transactional dan idempotent.
+Tetapi /login sendiri belum memeriksa:
 
-Acceptance criteria:
+user.status === 'ACTIVE'
 
-* Satu pertanyaan hanya dinilai satu kali.
-* Request finish berulang tidak menambah XP berulang.
-* Request paralel tidak menghasilkan reward ganda.
-* XP, achievement, progress, dan status session disimpan dalam satu transaction.
+dan /refresh juga hanya mengecek user ada atau tidak.
 
-## P1 — Authentication dan Accountability
+Jadi suspended user masih dapat memperoleh session/token baru, walaupun token tersebut kemudian ditolak saat mengakses protected endpoint.
 
-### 7. Refresh Token dan Session Revocation
+Lebih benar:
 
-Tambahkan penyimpanan session atau refresh token di database.
+login suspended → 401/403
+refresh suspended → 401
+suspend account → revoke seluruh Session
 
-Data minimal:
+Test suite saat ini hanya menguji existing access token ditolak setelah suspend, belum login dan refresh suspended account.
 
-* session ID atau JTI;
-* user ID;
-* createdAt;
-* expiresAt;
-* revokedAt;
-* lastUsedAt;
-* device atau user agent.
+Kesimpulan saya
 
-Fitur minimal:
+Revision ini bagus dan substantif, bukan cosmetic fix. Dari tujuh bypass terakhir, sebagian besar jalur eksploit utamanya sudah ditutup.
 
-* logout satu perangkat;
-* logout semua perangkat;
-* revoke token;
-* revoke otomatis setelah password berubah;
-* revoke otomatis setelah akun suspended.
+Namun saya belum rekomendasikan menutup security review sepenuhnya. Tinggal fokus ke empat hal:
 
-### 8. Validasi Role Assignment
+🔴 incomplete game tidak boleh menghasilkan XP/stat/reward;
+🟡 ubah exam start menjadi examId server-authoritative;
+🔴 refresh token browser jangan dikembalikan lewat JSON;
+🟡 login/refresh harus menolak suspended account.
 
-Role assignment harus memeriksa:
+Selain itu, GitHub commit terbaru belum memiliki status check CI yang terpasang, jadi klaim 87 test green berasal dari commit/report tim; belum ada GitHub Actions check yang bisa saya verifikasi dari commit tersebut.
 
-* `validFrom`;
-* `validUntil`;
-* status user;
-* scope sekolah;
-* scope role.
-
-Jangan hanya mengambil role assignment paling awal tanpa memvalidasi masa aktifnya.
-
-Acceptance criteria:
-
-* Role expired tidak dapat digunakan.
-* Role dari sekolah lain tidak dapat mengakses resource.
-* User dengan beberapa role dapat memilih active role secara eksplisit.
-
-### 9. Audit Log
-
-Tambahkan audit log untuk aktivitas penting:
-
-* login berhasil dan gagal;
-* registrasi;
-* role assignment;
-* parent claim;
-* join class;
-* create, update, dan delete class;
-* remove student;
-* perubahan profile;
-* start dan finish exam;
-* perubahan status akun.
-
-Data minimal:
-
-* actor ID;
-* school ID;
-* action;
-* entity type;
-* entity ID;
-* IP address;
-* user agent;
-* timestamp;
-* metadata.
-
-## P2 — Frontend dan Production Readiness
-
-### 10. Konfigurasi API URL
-
-API URL tidak boleh hardcoded ke localhost.
-
-Gunakan environment berbeda untuk:
-
-* development;
-* testing;
-* staging;
-* production.
-
-### 11. Security Headers
-
-Tambahkan minimal:
-
-* Content Security Policy;
-* `X-Content-Type-Options`;
-* `Referrer-Policy`;
-* `Permissions-Policy`;
-* frame protection;
-* secure cookie policy apabila token dipindahkan ke cookie.
-
-### 12. Token Storage
-
-Mohon evaluasi penggunaan `localStorage` untuk access dan refresh token.
-
-Prioritas:
-
-* refresh token disimpan menggunakan secure, HTTP-only, SameSite cookie;
-* access token dibuat berumur pendek;
-* jangan menyimpan refresh token jangka panjang di localStorage.
-
-## P3 — Testing
-
-Mohon tambahkan test berikut:
-
-* stored-XSS test;
-* privileged-role registration test;
-* suspended-account access test;
-* expired role-assignment test;
-* parent-link expiry test;
-* parent-link replay test;
-* cross-school authorization test;
-* one-question XP farming test;
-* exam timeout test;
-* duplicate-answer test;
-* duplicate-finish test;
-* concurrent finish request test;
-* refresh-token revocation test.
-
-Mohon pastikan jumlah test pada dokumentasi sesuai dengan hasil aktual `npm test`, karena saat ini terdapat perbedaan informasi antara 42 dan 46 test.
-
-## Catatan Product Decision
-
-Halaman Home tetap menggunakan menu grid.
-
-Mohon jangan mengembalikan Home ke layout “Today”. Informasi penting seperti notification, action required, upcoming activity, dan progress dapat ditampilkan sebagai badge, card, atau summary di bawah menu grid.
-
-## Format Pengiriman Perbaikan
-
-Mohon setiap perbaikan dikirim melalui commit atau pull request terpisah berdasarkan kategori:
-
-1. XSS remediation
-2. Account and role provisioning
-3. Parent-link security
-4. Game and exam integrity
-5. Session and token management
-6. Audit log
-7. Production configuration
-8. Automated tests
-
-Pada setiap pull request, sertakan:
-
-* masalah yang diperbaiki;
-* pendekatan solusi;
-* file yang berubah;
-* migration jika ada;
-* test yang ditambahkan;
-* hasil test;
-* risiko regression;
-* langkah manual verification.
-
-Mohon push seluruh perubahan ke repository agar dapat dilakukan review ulang berdasarkan diff terbaru.
+Kalau empat poin di atas dibereskan, menurut saya kita sudah bisa close fase security/game-integrity review dan lanjut ke Academic Foundation + Attendance.

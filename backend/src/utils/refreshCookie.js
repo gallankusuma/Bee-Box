@@ -28,4 +28,15 @@ function readRefreshToken(req) {
   return (req.cookies && req.cookies[COOKIE_NAME]) || req.body.refreshToken;
 }
 
-module.exports = { setRefreshCookie, clearRefreshCookie, readRefreshToken };
+// Review.md implementation-review round 3, item 3: a browser response must
+// never carry the refresh token in a JS-readable JSON body at all - doing so
+// defeats the point of the httpOnly cookie (any XSS on the page could just
+// read it off the fetch() response before it's ever near localStorage). Our
+// own native client (mobile-app) explicitly identifies itself since it has
+// nowhere else to put the token; anything that doesn't send this header is
+// treated as a browser and gets the cookie only.
+function isNativeClient(req) {
+  return req.headers['x-client-platform'] === 'native';
+}
+
+module.exports = { setRefreshCookie, clearRefreshCookie, readRefreshToken, isNativeClient };

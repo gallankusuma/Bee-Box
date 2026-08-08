@@ -10,9 +10,13 @@ function uniqueUsername(prefix) {
   return `${prefix}_${Date.now()}_${counter}`;
 }
 
+// X-Client-Platform:native on every fixture call below - these fixtures
+// model the mobile-app's body-based refresh-token flow (the original,
+// still-used-in-practice shape), not teacher-web's cookie-only one. The
+// cookie-only (browser) path has its own dedicated tests in auth.test.js.
 async function createStudent(overrides = {}) {
   const username = overrides.username || uniqueUsername('student');
-  const res = await request(app).post('/api/auth/register').send({
+  const res = await request(app).post('/api/auth/register').set('X-Client-Platform', 'native').send({
     password: 'testpass123', role: 'STUDENT', name: 'Test Student', grade: 3,
     ...overrides,
     username
@@ -37,7 +41,7 @@ async function createPrivilegedUser(role, overrides = {}) {
   const user = await prisma.user.create({ data: { personId: person.id, username, passwordHash, name, status: 'ACTIVE' } });
   await prisma.roleAssignment.create({ data: { userId: user.id, role, schoolId } });
 
-  const res = await request(app).post('/api/auth/login').send({ username, password });
+  const res = await request(app).post('/api/auth/login').set('X-Client-Platform', 'native').send({ username, password });
   if(res.status !== 200) throw new Error(`create${role} login failed: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body;
 }
@@ -47,7 +51,7 @@ function createAdmin(overrides) { return createPrivilegedUser('ADMIN', overrides
 
 async function createParent(overrides = {}) {
   const username = overrides.username || uniqueUsername('parent');
-  const res = await request(app).post('/api/auth/register').send({
+  const res = await request(app).post('/api/auth/register').set('X-Client-Platform', 'native').send({
     password: 'testpass123', role: 'PARENT', name: 'Test Parent',
     ...overrides,
     username

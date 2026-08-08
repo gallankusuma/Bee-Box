@@ -9,7 +9,7 @@ const { signAccessToken, signRefreshToken } = require('../utils/jwt');
 const { authLimiter } = require('../middleware/rateLimit');
 const { logAction } = require('../utils/auditLog');
 const { createSession } = require('../utils/sessions');
-const { setRefreshCookie } = require('../utils/refreshCookie');
+const { setRefreshCookie, isNativeClient } = require('../utils/refreshCookie');
 
 const router = express.Router();
 
@@ -125,9 +125,14 @@ router.post('/teacher/:token/accept', authLimiter, validateBody(acceptInviteSche
   const accessToken = signAccessToken(user, roleAssignment);
   const refreshToken = signRefreshToken(user, session.id);
   setRefreshCookie(res, refreshToken);
+  // Review.md implementation-review round 3, item 3: never put the refresh
+  // token in a JS-readable JSON body for a browser client - the httpOnly
+  // cookie above already delivered it to teacher-web (the only caller of
+  // this endpoint today).
   res.status(201).json({
     user: { id: user.id, name: user.name, avatar: user.avatar, role: roleAssignment.role, username: user.username, email: user.email },
-    accessToken, refreshToken
+    accessToken,
+    ...(isNativeClient(req) ? { refreshToken } : {})
   });
 });
 

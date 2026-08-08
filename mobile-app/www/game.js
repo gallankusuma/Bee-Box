@@ -31,7 +31,12 @@ function clearTokens() {
 
 const Api = {
   async request(method, path, body, opts = {}) {
-    const headers = { 'Content-Type': 'application/json' };
+    // Tells the backend this is the native app, not a browser - only then
+    // does it include the refresh token in the JSON body (this app has
+    // nowhere else to put it; teacher-web relies solely on the httpOnly
+    // cookie and never gets a body copy). Review.md implementation-review
+    // round 3, item 3.
+    const headers = { 'Content-Type': 'application/json', 'X-Client-Platform': 'native' };
     const token = getAccessToken();
     if(token && !opts.noAuth) headers['Authorization'] = `Bearer ${token}`;
 
@@ -62,7 +67,7 @@ const Api = {
     if(!refreshToken) return false;
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken })
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client-Platform': 'native' }, body: JSON.stringify({ refreshToken })
       });
       if(!res.ok) return false;
       const data = await res.json();
@@ -496,12 +501,15 @@ async function startGame(grade, subLevel, isExam = false, examObj = null) {
   examMode = isExam;
   currentExamObj = examObj;
 
+  // Exams are requested by examId (server derives grade/eligibility/duration
+  // itself from that, matching the "ex_<grade>" ids GET /profile/exams
+  // returns) - isExam/grade/questionCount are never sent as client-trusted
+  // values for an exam start. Review.md implementation-review round 3, item 2.
   let data;
   try {
-    data = await Api.post('/game/start', {
-      grade, subLevel, isExam,
-      questionCount: isExam ? (examObj?.questions || 10) : 10
-    });
+    data = isExam
+      ? await Api.post('/game/start', { examId: examObj.id })
+      : await Api.post('/game/start', { grade, subLevel });
   } catch(e) {
     alert('Gagal memulai permainan: ' + e.message);
     return;

@@ -41,6 +41,17 @@ describe('POST /api/auth/register', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  // Review.md implementation-review round 3, item 3: a browser (non-native)
+  // register response must never carry the refresh token in the JSON body.
+  it('never includes refreshToken in the body for a non-native client', async () => {
+    const res = await request(app).post('/api/auth/register').send({
+      username: uniqueUsername('browserreg'), password: 'testpass123', role: 'STUDENT', name: 'Browser Reg', grade: 3
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.refreshToken).toBeUndefined();
+    expect(res.body.accessToken).toEqual(expect.any(String));
+  });
 });
 
 describe('POST /api/auth/login', () => {
@@ -63,6 +74,28 @@ describe('POST /api/auth/login', () => {
     const res = await request(app).post('/api/auth/login').send({ username: 'nobody_here', password: 'whatever1' });
     expect(res.status).toBe(401);
   });
+
+  // Review.md implementation-review round 3, item 4: login must reject a
+  // suspended account outright, not silently issue a session/token pair
+  // that only fails later on its first protected request.
+  it('rejects login for a suspended account', async () => {
+    const username = uniqueUsername('suspended');
+    const student = await createStudent({ username });
+    await prisma.user.update({ where: { id: student.user.id }, data: { status: 'SUSPENDED' } });
+    const res = await request(app).post('/api/auth/login').send({ username, password: 'testpass123' });
+    expect(res.status).toBe(403);
+  });
+
+  // Review.md implementation-review round 3, item 3: a browser (non-native)
+  // login response must never carry the refresh token in the JSON body.
+  it('never includes refreshToken in the body for a non-native client', async () => {
+    const username = uniqueUsername('browserlogin');
+    await createStudent({ username });
+    const res = await request(app).post('/api/auth/login').send({ username, password: 'testpass123' });
+    expect(res.status).toBe(200);
+    expect(res.body.refreshToken).toBeUndefined();
+    expect(res.body.accessToken).toEqual(expect.any(String));
+  });
 });
 
 describe('POST /api/auth/refresh', () => {
@@ -83,7 +116,7 @@ describe('POST /api/auth/refresh', () => {
   // refresh token is only ever good for one use.
   it('invalidates the previous refresh token after rotation', async () => {
     const student = await createStudent();
-    const first = await request(app).post('/api/auth/refresh').send({ refreshToken: student.refreshToken });
+    const first = await request(app).post('/api/auth/refresh').set('X-Client-Platform', 'native').send({ refreshToken: student.refreshToken });
     expect(first.status).toBe(200);
     expect(first.body.refreshToken).not.toBe(student.refreshToken);
 
@@ -92,6 +125,26 @@ describe('POST /api/auth/refresh', () => {
 
     const withNewToken = await request(app).post('/api/auth/refresh').send({ refreshToken: first.body.refreshToken });
     expect(withNewToken.status).toBe(200);
+  });
+
+  // Review.md implementation-review round 3, item 3: a browser (non-native)
+  // response must never carry the refresh token in the JSON body at all -
+  // only the httpOnly cookie does that job for it.
+  it('never includes refreshToken in the body for a non-native client', async () => {
+    const student = await createStudent();
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken: student.refreshToken });
+    expect(res.status).toBe(200);
+    expect(res.body.refreshToken).toBeUndefined();
+  });
+
+  // Review.md implementation-review round 3, item 4: refresh must reject a
+  // suspended account outright, not just let requireAuth block the
+  // resulting (otherwise valid) access token on its next use.
+  it('rejects a refresh for a suspended account', async () => {
+    const student = await createStudent();
+    await prisma.user.update({ where: { id: student.user.id }, data: { status: 'SUSPENDED' } });
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken: student.refreshToken });
+    expect(res.status).toBe(401);
   });
 });
 
@@ -115,7 +168,7 @@ describe('POST /api/auth/logout-all', () => {
   it('revokes every session for the account', async () => {
     const username = uniqueUsername('multidevice');
     const first = await createStudent({ username });
-    const secondLogin = await request(app).post('/api/auth/login').send({ username, password: 'testpass123' });
+    const secondLogin = await request(app).post('/api/auth/login').set('X-Client-Platform', 'native').send({ username, password: 'testpass123' });
 
     const logoutAll = await request(app)
       .post('/api/auth/logout-all')

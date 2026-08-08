@@ -11,7 +11,7 @@ const { getDefaultSchoolId } = require('../utils/school');
 const { getActiveRoleAssignment } = require('../utils/roleAssignment');
 const { authLimiter } = require('../middleware/rateLimit');
 const { createSession } = require('../utils/sessions');
-const { setRefreshCookie, clearRefreshCookie, readRefreshToken } = require('../utils/refreshCookie');
+const { setRefreshCookie, clearRefreshCookie, readRefreshToken, isNativeClient } = require('../utils/refreshCookie');
 const { logAction } = require('../utils/auditLog');
 
 const registerSchema = z.object({
@@ -103,7 +103,14 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
     entityId: user.id, schoolId, metadata: { role }, req
   });
 
-  res.status(201).json({ user: publicUser(user, roleAssignment), studentProfile: user.studentProfile || null, accessToken, refreshToken });
+  // Review.md implementation-review round 3, item 3: a browser response
+  // must never carry the refresh token in a JS-readable JSON body - only
+  // the httpOnly cookie above does that job for it. mobile-app has nowhere
+  // else to put it, so it still gets one (see utils/refreshCookie.js).
+  res.status(201).json({
+    user: publicUser(user, roleAssignment), studentProfile: user.studentProfile || null, accessToken,
+    ...(isNativeClient(req) ? { refreshToken } : {})
+  });
 });
 
 // POST /api/auth/login
@@ -125,6 +132,15 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  // Review.md implementation-review round 3, item 4: a suspended account
+  // could still log in and mint a fresh session/token pair, even though
+  // that access token would then fail requireAuth on the very next request.
+  // Reject at the source instead of relying on every downstream check.
+  if(user.status !== 'ACTIVE') {
+    await logAction({ actorUserId: user.id, action: 'LOGIN_FAILED', entityType: 'User', entityId: user.id, metadata: { reason: 'inactive' }, req });
+    return res.status(403).json({ error: 'Account is not active' });
+  }
+
   const roleAssignment = await getActiveRoleAssignment(user.id);
   if(!roleAssignment) return res.status(401).json({ error: 'No active role assignment' });
 
@@ -140,7 +156,10 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
     entityId: user.id, schoolId: roleAssignment.schoolId, req
   });
 
-  res.json({ user: publicUser(user, roleAssignment), studentProfile: user.studentProfile || null, accessToken, refreshToken });
+  res.json({
+    user: publicUser(user, roleAssignment), studentProfile: user.studentProfile || null, accessToken,
+    ...(isNativeClient(req) ? { refreshToken } : {})
+  });
 });
 
 // POST /api/auth/refresh - rotates the refresh token on every call: the old
@@ -165,6 +184,11 @@ router.post('/refresh', authLimiter, validateBody(refreshSchema), async (req, re
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if(!user) return res.status(401).json({ error: 'User no longer exists' });
 
+  // Review.md implementation-review round 3, item 4: a suspended account
+  // holding a not-yet-revoked refresh token could otherwise keep rotating
+  // it into fresh (if ultimately unusable) access tokens indefinitely.
+  if(user.status !== 'ACTIVE') return res.status(401).json({ error: 'Account is not active' });
+
   const roleAssignment = await getActiveRoleAssignment(user.id);
   if(!roleAssignment) return res.status(401).json({ error: 'No active role assignment' });
 
@@ -175,7 +199,10 @@ router.post('/refresh', authLimiter, validateBody(refreshSchema), async (req, re
 
   const newRefreshToken = signRefreshToken(user, newSession.id);
   setRefreshCookie(res, newRefreshToken);
-  res.json({ accessToken: signAccessToken(user, roleAssignment), refreshToken: newRefreshToken });
+  res.json({
+    accessToken: signAccessToken(user, roleAssignment),
+    ...(isNativeClient(req) ? { refreshToken: newRefreshToken } : {})
+  });
 });
 
 // POST /api/auth/logout - revokes one session (the caller's). Accepts an

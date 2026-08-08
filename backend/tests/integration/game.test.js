@@ -54,26 +54,46 @@ describe('POST /api/game/start', () => {
     expect(res.body.questions.length).toBe(10);
   });
 
-  // Review.md implementation-review item 1/2: isExam=true used to skip
-  // grade/sub-level gating entirely, letting a client "unlock" any locked
-  // sub-level just by claiming exam mode. Exams get their own eligibility
-  // rule now (grade+-1 band) instead of no rule at all.
-  it('blocks an exam outside the student\'s grade+-1 band', async () => {
+  // Review.md implementation-review round 3, item 2: exam start is now
+  // examId-based - the server derives grade/eligibility/subLevel from it
+  // entirely, isExam/grade are never trusted client booleans/values for an
+  // exam start.
+  it('rejects an examId outside the student\'s grade+-1 band', async () => {
     const student = await createStudent({ grade: 3 });
     const res = await request(app)
       .post('/api/game/start')
       .set('Authorization', `Bearer ${student.accessToken}`)
-      .send({ grade: 9, subLevel: 5, isExam: true }); // grade 9 is nowhere near grade 3
+      .send({ examId: 'ex_9' }); // grade 9 is nowhere near grade 3
     expect(res.status).toBe(403);
   });
 
-  it('allows an exam for the student\'s own grade even with a locked sub-level value', async () => {
+  it('rejects a malformed examId', async () => {
     const student = await createStudent({ grade: 3 });
     const res = await request(app)
       .post('/api/game/start')
       .set('Authorization', `Bearer ${student.accessToken}`)
-      .send({ grade: 3, subLevel: 5, isExam: true }); // sub-level is pinned to 1 server-side for exams
+      .send({ examId: 'not-a-real-exam-id' });
+    expect(res.status).toBe(400);
+  });
+
+  it('allows an exam for the student\'s own grade via examId', async () => {
+    const student = await createStudent({ grade: 3 });
+    const res = await request(app)
+      .post('/api/game/start')
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ examId: 'ex_3' });
     expect(res.status).toBe(201);
+  });
+
+  it('ignores grade/subLevel/isExam when examId is present', async () => {
+    const student = await createStudent({ grade: 3 });
+    const res = await request(app)
+      .post('/api/game/start')
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({ examId: 'ex_3', grade: 9, subLevel: 5, isExam: false });
+    expect(res.status).toBe(201);
+    expect(res.body.grade).toBe(3);
+    expect(res.body.isExam).toBe(true);
   });
 });
 
@@ -137,18 +157,20 @@ describe('answer -> finish flow', () => {
     expect(second.status).toBe(409);
   });
 
-  // Review.md implementation-review item 4: finishing without answering
-  // every question must not grant sub-level completion credit - previously
-  // a student could start+immediately finish (0 real answers) 5 times in a
-  // row to instantly unlock the next grade with zero actual work.
-  it('does not grant sub-level completion credit when questions are left unanswered', async () => {
+  // Review.md implementation-review round 3, item 1: gating just the
+  // gradeProgress credit still let a client farm xp/totalGames/streak by
+  // starting a session, answering one question, and finishing immediately -
+  // repeatable indefinitely. /finish now rejects outright for a regular
+  // (non-exam) session with any unanswered question, so nothing gets
+  // computed or written at all for an incomplete attempt.
+  it('rejects finishing a regular session with unanswered questions, and changes nothing', async () => {
     const student = await createStudent({ grade: 3 });
     const start = await request(app)
       .post('/api/game/start')
       .set('Authorization', `Bearer ${student.accessToken}`)
       .send({ grade: 3, subLevel: 1 });
 
-    // Answer only the first question, leave the rest untouched, then bail.
+    // Answer only the first question, leave the rest untouched, then try to bail.
     const q = start.body.questions[0];
     const stored = await prisma.sessionQuestion.findUnique({ where: { id: q.id } });
     await request(app)
@@ -156,14 +178,34 @@ describe('answer -> finish flow', () => {
       .set('Authorization', `Bearer ${student.accessToken}`)
       .send({ questionId: q.id, answer: stored.answerKey });
 
+    const before = await request(app).get('/api/profile/me').set('Authorization', `Bearer ${student.accessToken}`);
+
     const finish = await request(app)
       .post(`/api/game/${start.body.sessionId}/finish`)
       .set('Authorization', `Bearer ${student.accessToken}`)
       .send({});
-    expect(finish.status).toBe(200); // finishing early is allowed, just not rewarded with progression
+    expect(finish.status).toBe(409);
+    expect(finish.body.code).toBe('INCOMPLETE_SESSION');
 
-    const me = await request(app).get('/api/profile/me').set('Authorization', `Bearer ${student.accessToken}`);
-    expect(me.body.gp['3']?.subs?.['1']?.done).not.toBe(true);
+    const after = await request(app).get('/api/profile/me').set('Authorization', `Bearer ${student.accessToken}`);
+    expect(after.body.xp).toBe(before.body.xp);
+    expect(after.body.totalGames).toBe(before.body.totalGames);
+    expect(after.body.gp['3']?.subs?.['1']?.done).not.toBe(true);
+
+    // The session itself is still open, not consumed by the rejected attempt -
+    // answering the rest and finishing for real still works.
+    for(const question of start.body.questions.slice(1)) {
+      const s = await prisma.sessionQuestion.findUnique({ where: { id: question.id } });
+      await request(app)
+        .post(`/api/game/${start.body.sessionId}/answer`)
+        .set('Authorization', `Bearer ${student.accessToken}`)
+        .send({ questionId: question.id, answer: s.answerKey });
+    }
+    const realFinish = await request(app)
+      .post(`/api/game/${start.body.sessionId}/finish`)
+      .set('Authorization', `Bearer ${student.accessToken}`)
+      .send({});
+    expect(realFinish.status).toBe(200);
   });
 
   // Review.md P3 test checklist: duplicate-finish, checked sequentially.
@@ -173,6 +215,14 @@ describe('answer -> finish flow', () => {
       .post('/api/game/start')
       .set('Authorization', `Bearer ${student.accessToken}`)
       .send({ grade: 3, subLevel: 1 });
+
+    for(const q of start.body.questions) {
+      const stored = await prisma.sessionQuestion.findUnique({ where: { id: q.id } });
+      await request(app)
+        .post(`/api/game/${start.body.sessionId}/answer`)
+        .set('Authorization', `Bearer ${student.accessToken}`)
+        .send({ questionId: q.id, answer: stored.answerKey });
+    }
 
     const first = await request(app)
       .post(`/api/game/${start.body.sessionId}/finish`)
@@ -258,7 +308,7 @@ describe('exam timer enforcement', () => {
     const start = await request(app)
       .post('/api/game/start')
       .set('Authorization', `Bearer ${student.accessToken}`)
-      .send({ grade: 3, subLevel: 1, isExam: true });
+      .send({ examId: 'ex_3' });
     const sessionId = start.body.sessionId;
 
     await prisma.gameSession.update({ where: { id: sessionId }, data: { expiresAt: new Date(Date.now() - 1000) } });

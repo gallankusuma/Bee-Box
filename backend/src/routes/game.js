@@ -15,10 +15,19 @@ const router = express.Router();
 // questionCount is NOT client-controlled (Team_Review.md P0 item 4 - a client
 // could otherwise request questionCount=1 to farm XP faster) - it's derived
 // server-side from isExam below, regardless of what the request body contains.
+//
+// examId (matching the "ex_<grade>" ids GET /profile/exams already returns)
+// is how a client asks for an exam - isExam is never a client-set boolean.
+// The server derives isExam/grade/subLevel entirely from examId when
+// present, so there's nothing left for a client to lie about: no examId
+// means regular play, and grade+subLevel are then required.
+// Review.md implementation-review round 3, item 2.
 const startGameSchema = z.object({
-  grade: z.coerce.number().int().refine(g => !!GRADE_CONFIG[g], { message: 'Invalid grade' }),
-  subLevel: z.coerce.number().int().min(1).max(5),
-  isExam: z.boolean().optional().default(false)
+  grade: z.coerce.number().int().refine(g => !!GRADE_CONFIG[g], { message: 'Invalid grade' }).optional(),
+  subLevel: z.coerce.number().int().min(1).max(5).optional(),
+  examId: z.string().regex(/^ex_\d+$/, { message: 'Invalid examId' }).optional()
+}).refine(data => data.examId !== undefined || (data.grade !== undefined && data.subLevel !== undefined), {
+  message: 'Provide examId for an exam, or grade+subLevel for regular play', path: ['grade']
 });
 
 const answerSchema = z.object({
@@ -48,23 +57,24 @@ router.post('/start', requireAuth, requireRole('STUDENT'), validateBody(startGam
   const profile = await getStudentProfileOr404(req.auth.userId, res);
   if(!profile) return;
 
-  const { grade, isExam } = req.body;
-  // Exams are pinned to sub-level 1 server-side (they're not part of the
-  // sub-level progression at all) - the client always sends 1 anyway, this
-  // just stops a tampered value from doing anything.
-  const subLevel = isExam ? 1 : req.body.subLevel;
+  const isExam = req.body.examId !== undefined;
+  let grade, subLevel;
 
   if(isExam) {
-    // Review.md implementation-review item 1/2: isExam=true previously
-    // skipped grade/sub-level gating entirely, letting a client "unlock" any
-    // sub-level just by claiming exam mode. Exams get their OWN eligibility
-    // rule instead of no rule: the same grade+-1 band /profile/exams already
-    // exposes, not the full unlockedGrades progression.
+    // Exams get their OWN eligibility rule (grade+-1 band, matching what
+    // GET /profile/exams already exposes) instead of the full unlockedGrades
+    // progression - and sub-level is pinned to 1 server-side (exams aren't
+    // part of the sub-level progression at all).
+    const examGrade = parseInt(req.body.examId.slice('ex_'.length), 10);
     const allowedExamGrades = [profile.grade - 1, profile.grade, profile.grade + 1].filter(g => g >= 1 && g <= 9);
-    if(!allowedExamGrades.includes(grade)) {
-      return res.status(403).json({ error: `Exam for grade ${grade} is not available for your grade` });
+    if(!GRADE_CONFIG[examGrade] || !allowedExamGrades.includes(examGrade)) {
+      return res.status(403).json({ error: `Exam ${req.body.examId} is not available for your grade` });
     }
+    grade = examGrade;
+    subLevel = 1;
   } else {
+    grade = req.body.grade;
+    subLevel = req.body.subLevel;
     const unlockedGrades = JSON.parse(profile.unlockedGrades || '[1]');
     if(!unlockedGrades.includes(grade)) return res.status(403).json({ error: `Grade ${grade} is not unlocked yet` });
 
@@ -182,6 +192,23 @@ router.post('/:sessionId/finish', requireAuth, requireRole('STUDENT'), async (re
   if(!session || session.studentId !== profile.id) return res.status(404).json({ error: 'Session not found' });
   if(session.status !== 'active') return res.status(409).json({ error: 'Session already finished' });
 
+  // Review.md implementation-review round 3, item 1: gating only the
+  // gradeProgress/unlock credit (previous fix) still let a client farm
+  // xp/totalGames/streak/achievements by starting a session, answering one
+  // question, and finishing immediately - none of that is tied to
+  // "did you actually play the session." Rejecting outright is stricter and
+  // simpler: nothing is computed or written at all for an incomplete
+  // regular-play attempt, the session just stays 'active' (answerable
+  // later, or left dangling forever - either way, worth zero). The
+  // legitimate "quit mid-game" UI path (mobile-app's gameBackBtn) never
+  // calls /finish at all, so this doesn't block any real user flow. Exams
+  // are exempt - a real exam legitimately ending with unanswered questions
+  // (ran out of total time) is expected, not a bypass, and exams don't
+  // unlock anything further for this check to matter.
+  if(!session.isExam && !session.questions.every(q => q.answeredAt !== null)) {
+    return res.status(409).json({ error: 'Answer every question before finishing', code: 'INCOMPLETE_SESSION' });
+  }
+
   const now = new Date();
   // Defensive backstop, not the primary guard: /answer already rejects new
   // answers once an exam is past expiresAt, so this only matters if a write
@@ -243,16 +270,11 @@ router.post('/:sessionId/finish', requireAuth, requireRole('STUDENT'), async (re
     });
 
     // --- Non-exam: grade progress stars + next-grade unlock ---
-    // Review.md implementation-review item 4: finishing with unanswered
-    // questions must not grant "done" progression credit - previously a
-    // student could start+immediately finish (0 real answers) 5 times to
-    // instantly unlock the next grade. Exams are exempt from this (below):
-    // an exam that legitimately runs out of total time with a few questions
-    // still unanswered is a normal, expected outcome, not a bypass - exams
-    // don't unlock anything further, so there's nothing to gate there.
-    const allQuestionsAnswered = session.questions.every(q => q.answeredAt !== null);
+    // Reaching here for a non-exam session already guarantees every
+    // question was answered (rejected earlier otherwise), so this is just
+    // the exam/non-exam branch, not a completion gate anymore.
     let gradeUnlocked = null;
-    if(!session.isExam && allQuestionsAnswered) {
+    if(!session.isExam) {
       const stars = accuracy === 100 ? 3 : accuracy >= 80 ? 2 : 1;
       const existing = await tx.gradeProgress.findUnique({
         where: { studentId_grade_subLevel: { studentId: profile.id, grade: session.grade, subLevel: session.subLevel } }
